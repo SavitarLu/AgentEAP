@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SECS Workflow Designer</title>
+  <style>
+    body { font-family: -apple-system, Arial, sans-serif; margin: 0; background: #f5f6f8; }
+    .wrap { display: grid; grid-template-columns: 280px 1fr 440px; gap: 12px; padding: 12px; height: 100vh; box-sizing: border-box; }
+    .panel { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px; overflow: auto; }
+    h3 { margin: 0 0 8px 0; font-size: 15px; }
+    .node { border: 1px solid #666; border-radius: 6px; padding: 8px; margin: 8px 0; background: #fafafa; cursor: grab; }
+    .canvas { min-height: 180px; border: 2px dashed #999; border-radius: 8px; padding: 10px; background: #fcfcff; }
+    .canvas .node { cursor: default; border-color: #3b82f6; background: #eef4ff; }
+    .row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; margin: 6px 0; }
+    input { width: 100%; box-sizing: border-box; padding: 6px; }
+    button { margin-right: 8px; padding: 6px 10px; }
+    textarea { width: 100%; height: 36vh; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .hint { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h3>Palette</h3>
+      <div class="hint">Drag nodes to canvas</div>
+      <div class="node" draggable="true" data-type="trigger">Trigger (SxFy)</div>
+      <div class="node" draggable="true" data-type="send_message">Send Message</div>
+      <div class="node" draggable="true" data-type="wait_reply">Wait Reply</div>
+      <div class="node" draggable="true" data-type="if_hcack">If HCACK == N</div>
+    </div>
+
+    <div class="panel">
+      <h3>Canvas</h3>
+      <div id="canvas" class="canvas"></div>
+      <div style="margin-top:10px;">
+        <button id="btnExport">Export YAML Snippet</button>
+        <button id="btnImport">Import YAML</button>
+        <button id="btnClear">Clear</button>
+      </div>
+      <div class="hint" style="margin-top:8px;">
+        Recommended order: Trigger -> Send Message -> Wait Reply / If HCACK
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>YAML IO</h3>
+      <div class="hint">Input (for Import)</div>
+      <textarea id="input"></textarea>
+      <div class="hint" style="margin-top:6px;">Output (paste into <code>business_logic.workflows</code>)</div>
+      <textarea id="output" readonly></textarea>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const input = document.getElementById("input");
+    const output = document.getElementById("output");
+
+    document.querySelectorAll(".node[draggable=true]").forEach(el => {
+      el.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("node-type", el.dataset.type);
+      });
+    });
+
+    canvas.addEventListener("dragover", e => e.preventDefault());
+    canvas.addEventListener("drop", e => {
+      e.preventDefault();
+      const type = e.dataTransfer.getData("node-type");
+      if (!type) return;
+      canvas.appendChild(createNode(type));
+    });
+
+    function createInput(label, value = "") {
+      const row = document.createElement("div");
+      row.className = "row";
+      const l = document.createElement("label");
+      l.textContent = label;
+      const inp = document.createElement("input");
+      inp.value = value;
+      row.appendChild(l);
+      row.appendChild(inp);
+      return { row, inp };
+    }
+
+    function createNode(type) {
+      const node = document.createElement("div");
+      node.className = "node";
+      node.dataset.type = type;
+      const title = document.createElement("strong");
+      title.textContent = type;
+      node.appendChild(title);
+
+      if (type === "trigger") {
+        const sf = createInput("sf", "S6F11");
+        sf.inp.dataset.key = "sf";
+        node.appendChild(sf.row);
+      } else if (type === "send_message") {
+        const stream = createInput("stream", "2");
+        stream.inp.dataset.key = "stream";
+        const func = createInput("function", "41");
+        func.inp.dataset.key = "function";
+        const wait = createInput("wait_reply", "true");
+        wait.inp.dataset.key = "wait_reply";
+        const retries = createInput("retries", "0");
+        retries.inp.dataset.key = "retries";
+        const cmd = createInput("rcmd", "START");
+        cmd.inp.dataset.key = "rcmd";
+        node.appendChild(stream.row);
+        node.appendChild(func.row);
+        node.appendChild(wait.row);
+        node.appendChild(retries.row);
+        node.appendChild(cmd.row);
+      } else if (type === "wait_reply") {
+        const sf = createInput("expect_sf", "S2F42");
+        sf.inp.dataset.key = "expect_sf";
+        const timeout = createInput("timeout", "5");
+        timeout.inp.dataset.key = "timeout";
+        node.appendChild(sf.row);
+        node.appendChild(timeout.row);
+      } else if (type === "if_hcack") {
+        const equals = createInput("equals", "0");
+        equals.inp.dataset.key = "equals";
+        node.appendChild(equals.row);
+      }
+
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "Remove";
+      removeBtn.onclick = () => node.remove();
+      node.appendChild(removeBtn);
+      return node;
+    }
+
+    function toBool(v) {
+      return String(v).trim().toLowerCase() === "true";
+    }
+
+    function exportYaml() {
+      const nodes = [...canvas.querySelectorAll(".node")];
+      const triggerNode = nodes.find(n => n.dataset.type === "trigger");
+      if (!triggerNode) {
+        output.value = "# Need trigger node";
+        return;
+      }
+
+      const triggerSf = triggerNode.querySelector("input[data-key=sf]").value || "S6F11";
+      const steps = [];
+      nodes.forEach((n) => {
+        const t = n.dataset.type;
+        if (t === "trigger") return;
+        if (t === "send_message") {
+          steps.push({
+            action: "send_message",
+            stream: Number(n.querySelector("input[data-key=stream]").value || 2),
+            function: Number(n.querySelector("input[data-key=function]").value || 41),
+            wait_reply: toBool(n.querySelector("input[data-key=wait_reply]").value),
+            retries: Number(n.querySelector("input[data-key=retries]").value || 0),
+            rcmd: n.querySelector("input[data-key=rcmd]").value || "START",
+          });
+          return;
+        }
+        if (t === "wait_reply") {
+          steps.push({
+            action: "wait_reply",
+            expect_sf: n.querySelector("input[data-key=expect_sf]").value || "S2F42",
+            timeout: Number(n.querySelector("input[data-key=timeout]").value || 5),
+          });
+          return;
+        }
+        if (t === "if_hcack") {
+          steps.push({
+            action: "if_hcack",
+            equals: Number(n.querySelector("input[data-key=equals]").value || 0),
+          });
+        }
+      });
+
+      if (steps.length === 0) {
+        output.value = "# Need at least one step node";
+        return;
+      }
+
+      let yaml = "";
+      yaml += "- name: \"drag_flow_1\"\n";
+      yaml += "  trigger:\n";
+      yaml += `    sf: \"${triggerSf}\"\n`;
+      yaml += "  steps:\n";
+
+      steps.forEach(s => {
+        if (s.action === "send_message") {
+          yaml += "    - action: \"send_message\"\n";
+          yaml += `      stream: ${s.stream}\n`;
+          yaml += `      function: ${s.function}\n`;
+          yaml += `      wait_reply: ${s.wait_reply ? "true" : "false"}\n`;
+          yaml += `      retries: ${s.retries}\n`;
+          yaml += "      timeout: 5\n";
+          yaml += "      items:\n";
+          yaml += "        - type: \"L\"\n";
+          yaml += "          items:\n";
+          yaml += `            - type: \"A\"\n              value: \"${s.rcmd}\"\n`;
+          yaml += "            - type: \"L\"\n";
+          yaml += "              items:\n";
+          yaml += "                - type: \"L\"\n";
+          yaml += "                  items:\n";
+          yaml += "                    - type: \"A\"\n                      value: \"JOB_ID\"\n";
+          yaml += "                    - type: \"A\"\n                      value: \"${job_id}\"\n";
+          return;
+        }
+        if (s.action === "wait_reply") {
+          yaml += "    - action: \"wait_reply\"\n";
+          yaml += `      expect_sf: \"${s.expect_sf}\"\n`;
+          yaml += `      timeout: ${s.timeout}\n`;
+          return;
+        }
+        if (s.action === "if_hcack") {
+          yaml += "    - action: \"if_hcack\"\n";
+          yaml += `      equals: ${s.equals}\n`;
+          yaml += "      then: []\n";
+          yaml += "      else: []\n";
+        }
+      });
+
+      output.value = yaml;
+    }
+
+    function importYaml() {
+      const text = input.value || "";
+      canvas.innerHTML = "";
+
+      const sfMatch = text.match(/sf:\s*["']?(S\d+F\d+)["']?/i);
+      const trigger = createNode("trigger");
+      if (sfMatch) trigger.querySelector("input[data-key=sf]").value = sfMatch[1];
+      canvas.appendChild(trigger);
+
+      const sendRegex = /-\s*action:\s*["']send_message["'][\s\S]*?stream:\s*(\d+)[\s\S]*?function:\s*(\d+)[\s\S]*?wait_reply:\s*(true|false)[\s\S]*?(?:retries:\s*(\d+))?[\s\S]*?value:\s*["']([^"']+)["']/gi;
+      let m;
+      while ((m = sendRegex.exec(text)) !== null) {
+        const n = createNode("send_message");
+        n.querySelector("input[data-key=stream]").value = m[1];
+        n.querySelector("input[data-key=function]").value = m[2];
+        n.querySelector("input[data-key=wait_reply]").value = m[3];
+        n.querySelector("input[data-key=retries]").value = m[4] || "0";
+        n.querySelector("input[data-key=rcmd]").value = m[5];
+        canvas.appendChild(n);
+      }
+
+      const waitRegex = /-\s*action:\s*["']wait_reply["'][\s\S]*?expect_sf:\s*["']([^"']+)["'][\s\S]*?timeout:\s*(\d+)/gi;
+      while ((m = waitRegex.exec(text)) !== null) {
+        const n = createNode("wait_reply");
+        n.querySelector("input[data-key=expect_sf]").value = m[1];
+        n.querySelector("input[data-key=timeout]").value = m[2];
+        canvas.appendChild(n);
+      }
+
+      const ifRegex = /-\s*action:\s*["']if_hcack["'][\s\S]*?equals:\s*(\d+)/gi;
+      while ((m = ifRegex.exec(text)) !== null) {
+        const n = createNode("if_hcack");
+        n.querySelector("input[data-key=equals]").value = m[1];
+        canvas.appendChild(n);
+      }
+    }
+
+    document.getElementById("btnExport").onclick = exportYaml;
+    document.getElementById("btnImport").onclick = importYaml;
+    document.getElementById("btnClear").onclick = () => { canvas.innerHTML = ""; output.value = ""; input.value = ""; };
+  </script>
+</body>
+</html>

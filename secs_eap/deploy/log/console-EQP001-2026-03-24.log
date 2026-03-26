@@ -1,0 +1,560 @@
+2026-03-24 14:38:03,778 - secs_eap.eap - INFO - Initializing EAP components...
+2026-03-24 14:38:03,778 - secs_eap.driver_adapter - INFO - DriverAdapter initialized: EQP001
+2026-03-24 14:38:03,778 - secs_eap.eap - INFO - Registered 5 message handlers
+2026-03-24 14:38:03,778 - secs_eap.eap - INFO - EAP components initialized
+2026-03-24 14:38:03,778 - secs_eap.eap - INFO - Starting EAP...
+2026-03-24 14:38:03,778 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher started
+2026-03-24 14:38:03,778 - secs_eap.driver_adapter - INFO - Connection state: disconnected -> connecting
+2026-03-24 14:38:03,778 - secs_driver.src.secs_driver - INFO - SECS Driver initialized: EQP001
+2026-03-24 14:38:03,778 - secs_driver.src.secs_driver - INFO - Starting SECS Driver...
+2026-03-24 14:38:03,778 - secs_driver.src.connection - INFO - Starting server on 192.168.2.5:5000
+2026-03-24 14:38:03,779 - secs_eap.services.recipe_service - INFO - Scanned 0 recipes
+2026-03-24 14:38:03,779 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connecting
+2026-03-24 14:38:03,779 - secs_driver.src.connection - INFO - Server listening on ('192.168.2.5', 5000)
+2026-03-24 14:38:03,779 - secs_driver.src.message_handler - INFO - Message handler started
+2026-03-24 14:38:03,779 - secs_driver.src.secs_driver - INFO - SECS Driver started successfully
+2026-03-24 14:38:03,779 - secs_eap.driver_adapter - INFO - Connected to 192.168.2.5:5000
+2026-03-24 14:38:03,779 - secs_eap.eap - INFO - EAP started successfully
+2026-03-24 14:38:12,525 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 62292)
+2026-03-24 14:38:12,527 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 62292)
+2026-03-24 14:38:12,527 - secs_driver.src.session - INFO - Session state changed: 0 -> 1
+2026-03-24 14:38:12,527 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-24 14:38:12,528 - secs_eap.driver_adapter - INFO - Connection state: connecting -> connected
+2026-03-24 14:38:12,528 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 1
+2026-03-24 14:38:12,528 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-24 14:38:12,529 - secs_driver.src.session - INFO - Session state changed: 1 -> 4
+2026-03-24 14:38:12,529 - secs_driver.src.secs_driver - INFO - State changed: 1 -> 4
+2026-03-24 14:38:12,529 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-24 14:38:12,529 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-24 14:38:12,530 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-24 14:38:13,728 - secs_eap.driver_adapter - INFO - RX
+S1F1 W
+2026-03-24 14:38:13,729 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher received: S1F1 (w_bit=True, items=0)
+2026-03-24 14:38:13,729 - secs_eap.message_handlers.s1_handler - INFO - Received S1F1: Are You There
+2026-03-24 14:38:13,729 - secs_eap.driver_adapter - INFO - TX-REPLY for S1F1
+S1F2
+  <A 'EAP001'>
+  <A 'V1.0.0'>
+2026-03-24 14:38:13,729 - secs_eap.message_handlers.dispatcher - INFO - Sent auto reply for S1F1
+2026-03-24 14:38:30,564 - secs_eap.eap - INFO - Received shutdown signal
+2026-03-24 14:38:30,565 - secs_eap.eap - INFO - Stopping EAP...
+2026-03-24 14:38:30,565 - secs_eap.driver_adapter - INFO - Connection state: selected -> disconnecting
+2026-03-24 14:38:30,565 - secs_driver.src.secs_driver - INFO - Stopping SECS Driver...
+2026-03-24 14:38:30,565 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnecting
+2026-03-24 14:38:30,565 - secs_driver.src.message_handler - ERROR - Send loop error: Lock is not acquired.
+2026-03-24 14:38:30,565 - secs_driver.src.message_handler - INFO - Message handler stopped
+2026-03-24 14:38:30,566 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 62292)
+2026-03-24 14:38:30,566 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 62292)
+2026-03-24 14:38:30,566 - secs_driver.src.session - INFO - Session state changed: 4 -> 0
+2026-03-24 14:38:30,566 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 62292)
+2026-03-24 14:38:30,566 - secs_eap.driver_adapter - INFO - Connection state: disconnecting -> disconnected
+2026-03-24 14:38:30,566 - secs_driver.src.connection - INFO - Server stopped
+2026-03-24 14:38:30,566 - secs_driver.src.secs_driver - INFO - SECS Driver stopped
+2026-03-24 14:38:30,566 - secs_eap.driver_adapter - INFO - Disconnected
+2026-03-24 14:38:30,566 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher stopped
+2026-03-24 14:38:30,566 - secs_eap.eap - INFO - EAP stopped
+2026-03-24 14:38:30,566 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 0
+2026-03-24 14:38:30,566 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnected
+2026-03-24 14:47:55,528 - secs_eap.eap - INFO - Initializing EAP components...
+2026-03-24 14:47:55,529 - secs_eap.driver_adapter - INFO - DriverAdapter initialized: EQP001
+2026-03-24 14:47:55,529 - secs_eap.eap - INFO - Registered 5 message handlers
+2026-03-24 14:47:55,529 - secs_eap.eap - INFO - EAP components initialized
+2026-03-24 14:47:55,529 - secs_eap.eap - INFO - Starting EAP...
+2026-03-24 14:47:55,529 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher started
+2026-03-24 14:47:55,529 - secs_eap.driver_adapter - INFO - Connection state: disconnected -> connecting
+2026-03-24 14:47:55,529 - secs_driver.src.secs_driver - INFO - SECS Driver initialized: EQP001
+2026-03-24 14:47:55,529 - secs_driver.src.secs_driver - INFO - Starting SECS Driver...
+2026-03-24 14:47:55,529 - secs_driver.src.connection - INFO - Starting server on 192.168.2.5:5000
+2026-03-24 14:47:55,529 - secs_eap.services.recipe_service - INFO - Scanned 0 recipes
+2026-03-24 14:47:55,529 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connecting
+2026-03-24 14:47:55,530 - secs_driver.src.connection - INFO - Server listening on ('192.168.2.5', 5000)
+2026-03-24 14:47:55,530 - secs_driver.src.message_handler - INFO - Message handler started
+2026-03-24 14:47:55,530 - secs_driver.src.secs_driver - INFO - SECS Driver started successfully
+2026-03-24 14:47:55,530 - secs_eap.driver_adapter - INFO - Connected to 192.168.2.5:5000
+2026-03-24 14:47:55,530 - secs_eap.eap - INFO - EAP started successfully
+2026-03-24 14:48:00,650 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 64467)
+2026-03-24 14:48:00,651 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 64467)
+2026-03-24 14:48:00,652 - secs_driver.src.session - INFO - Session state changed: 0 -> 1
+2026-03-24 14:48:00,652 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-24 14:48:00,652 - secs_eap.driver_adapter - INFO - Connection state: connecting -> connected
+2026-03-24 14:48:00,652 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 1
+2026-03-24 14:48:00,652 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-24 14:48:00,653 - secs_driver.src.session - INFO - Session state changed: 1 -> 4
+2026-03-24 14:48:00,653 - secs_driver.src.secs_driver - INFO - State changed: 1 -> 4
+2026-03-24 14:48:00,653 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-24 14:48:00,653 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-24 14:48:00,653 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-24 14:48:02,578 - secs_eap.driver_adapter - INFO - RX
+S2F41 W
+  <L [2]
+    <A>
+    <L [1]
+      <L [2]
+        <A>
+        <A>
+      >
+    >
+  >
+2026-03-24 14:48:02,578 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher received: S2F41 (w_bit=True, items=1)
+2026-03-24 14:48:02,578 - secs_eap.message_handlers.s2_handler - WARNING - No handler for S2F41
+2026-03-24 14:48:02,578 - secs_eap.message_handlers.base_handler - WARNING - All handlers failed for S2F41
+2026-03-24 14:48:02,578 - secs_eap.message_handlers.dispatcher - WARNING - Handler failed for S2F41: No handler processed the message
+2026-03-24 14:48:18,893 - secs_driver.src.session - INFO - Session state changed: 4 -> 0
+2026-03-24 14:48:18,894 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 0
+2026-03-24 14:48:18,894 - secs_eap.driver_adapter - INFO - Received Separate request
+2026-03-24 14:48:18,894 - secs_eap.driver_adapter - INFO - Connection state: selected -> connected
+2026-03-24 14:48:18,894 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-24 14:48:19,398 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 64467)
+2026-03-24 14:48:19,399 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 64467)
+2026-03-24 14:48:19,400 - secs_driver.src.session - INFO - Session state changed: 0 -> 0
+2026-03-24 14:48:19,400 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 64467)
+2026-03-24 14:48:19,400 - secs_eap.driver_adapter - INFO - Connection state: connected -> disconnected
+2026-03-24 14:48:19,400 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 0
+2026-03-24 14:48:19,400 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnected
+2026-03-24 15:01:36,148 - secs_eap.eap - INFO - Received shutdown signal
+2026-03-24 15:01:36,148 - secs_eap.eap - INFO - Stopping EAP...
+2026-03-24 15:01:36,148 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher stopped
+2026-03-24 15:01:36,148 - secs_eap.eap - INFO - EAP stopped
+2026-03-24 15:01:36,575 - secs_driver.src.message_handler - ERROR - Send loop error: Lock is not acquired.
+2026-03-24 15:01:46,968 - secs_eap.eap - INFO - Received shutdown signal
+2026-03-24 15:02:02,243 - secs_eap.eap - INFO - Received shutdown signal
+2026-03-24 15:02:56,113 - secs_eap.eap - INFO - Initializing EAP components...
+2026-03-24 15:02:56,113 - secs_eap.services.workflow_engine - WARNING - Workflow file not found: ../config/workflows.yaml
+2026-03-24 15:02:56,113 - secs_eap.driver_adapter - INFO - DriverAdapter initialized: EQP001
+2026-03-24 15:02:56,114 - secs_eap.eap - INFO - Registered 5 message handlers
+2026-03-24 15:02:56,114 - secs_eap.eap - INFO - EAP components initialized
+2026-03-24 15:02:56,114 - secs_eap.eap - INFO - Starting EAP...
+2026-03-24 15:02:56,114 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher started
+2026-03-24 15:02:56,114 - secs_eap.driver_adapter - INFO - Connection state: disconnected -> connecting
+2026-03-24 15:02:56,114 - secs_driver.src.secs_driver - INFO - SECS Driver initialized: EQP001
+2026-03-24 15:02:56,114 - secs_driver.src.secs_driver - INFO - Starting SECS Driver...
+2026-03-24 15:02:56,114 - secs_driver.src.connection - INFO - Starting server on 192.168.2.5:5000
+2026-03-24 15:02:56,114 - secs_eap.services.recipe_service - INFO - Scanned 0 recipes
+2026-03-24 15:02:56,114 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connecting
+2026-03-24 15:02:56,114 - secs_driver.src.connection - INFO - Server listening on ('192.168.2.5', 5000)
+2026-03-24 15:02:56,115 - secs_driver.src.message_handler - INFO - Message handler started
+2026-03-24 15:02:56,115 - secs_driver.src.secs_driver - INFO - SECS Driver started successfully
+2026-03-24 15:02:56,115 - secs_eap.driver_adapter - INFO - Connected to 192.168.2.5:5000
+2026-03-24 15:02:56,115 - secs_eap.eap - INFO - EAP started successfully
+2026-03-24 15:03:00,862 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 51305)
+2026-03-24 15:03:00,863 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 51305)
+2026-03-24 15:03:00,863 - secs_driver.src.session - INFO - Session state changed: 0 -> 1
+2026-03-24 15:03:00,864 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-24 15:03:00,864 - secs_eap.driver_adapter - INFO - Connection state: connecting -> connected
+2026-03-24 15:03:00,864 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 1
+2026-03-24 15:03:00,864 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-24 15:03:00,864 - secs_driver.src.session - INFO - Session state changed: 1 -> 4
+2026-03-24 15:03:00,865 - secs_driver.src.secs_driver - INFO - State changed: 1 -> 4
+2026-03-24 15:03:00,865 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-24 15:03:00,865 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-24 15:03:00,865 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-24 15:03:03,135 - secs_eap.driver_adapter - INFO - RX
+S1F1 W
+2026-03-24 15:03:03,136 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher received: S1F1 (w_bit=True, items=0)
+2026-03-24 15:03:03,136 - secs_eap.message_handlers.s1_handler - INFO - Received S1F1: Are You There
+2026-03-24 15:03:03,137 - secs_eap.driver_adapter - INFO - TX-REPLY for S1F1
+S1F2
+  <A 'EAP001'>
+  <A 'V1.0.0'>
+2026-03-24 15:03:03,137 - secs_eap.message_handlers.dispatcher - INFO - Sent auto reply for S1F1
+2026-03-24 15:03:17,651 - secs_eap.driver_adapter - INFO - RX
+S6F11 W
+  <L [3]
+    <A>
+    <A>
+    <L [1]
+      <L [2]
+        <A>
+        <L [1]
+          <A>
+        >
+      >
+    >
+  >
+2026-03-24 15:03:17,651 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher received: S6F11 (w_bit=True, items=1)
+2026-03-24 15:03:17,651 - secs_eap.message_handlers.s6_handler - INFO - Received S6F11: Process Program Load Request
+2026-03-24 15:03:17,651 - secs_eap.driver_adapter - INFO - TX-REPLY for S6F11
+S6F12
+2026-03-24 15:03:17,652 - secs_eap.message_handlers.dispatcher - INFO - Sent auto reply for S6F11
+2026-03-24 15:07:03,649 - secs_eap.eap - INFO - Received shutdown signal
+2026-03-24 15:07:03,649 - secs_eap.eap - INFO - Stopping EAP...
+2026-03-24 15:07:03,649 - secs_eap.driver_adapter - INFO - Connection state: selected -> disconnecting
+2026-03-24 15:07:03,649 - secs_driver.src.secs_driver - INFO - Stopping SECS Driver...
+2026-03-24 15:07:03,649 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnecting
+2026-03-24 15:07:03,650 - secs_driver.src.message_handler - ERROR - Send loop error: Lock is not acquired.
+2026-03-24 15:07:03,650 - secs_driver.src.message_handler - INFO - Message handler stopped
+2026-03-24 15:07:03,650 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 51305)
+2026-03-24 15:07:03,650 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 51305)
+2026-03-24 15:07:03,650 - secs_driver.src.session - INFO - Session state changed: 4 -> 0
+2026-03-24 15:07:03,650 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 51305)
+2026-03-24 15:07:03,650 - secs_eap.driver_adapter - INFO - Connection state: disconnecting -> disconnected
+2026-03-24 15:07:03,650 - secs_driver.src.connection - INFO - Server stopped
+2026-03-24 15:07:03,650 - secs_driver.src.secs_driver - INFO - SECS Driver stopped
+2026-03-24 15:07:03,650 - secs_eap.driver_adapter - INFO - Disconnected
+2026-03-24 15:07:03,650 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher stopped
+2026-03-24 15:07:03,650 - secs_eap.eap - INFO - EAP stopped
+2026-03-24 15:07:03,650 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 0
+2026-03-24 15:07:03,650 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnected
+2026-03-24 15:07:10,997 - secs_eap.eap - INFO - Initializing EAP components...
+2026-03-24 15:07:10,999 - secs_eap.services.workflow_engine - INFO - Loaded 1 workflow(s) from /Users/luxinyu/work/个人/secs_eap/deploy/config/workflows.yaml
+2026-03-24 15:07:11,000 - secs_eap.driver_adapter - INFO - DriverAdapter initialized: EQP001
+2026-03-24 15:07:11,000 - secs_eap.eap - INFO - Registered 5 message handlers
+2026-03-24 15:07:11,000 - secs_eap.eap - INFO - EAP components initialized
+2026-03-24 15:07:11,000 - secs_eap.eap - INFO - Starting EAP...
+2026-03-24 15:07:11,000 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher started
+2026-03-24 15:07:11,000 - secs_eap.driver_adapter - INFO - Connection state: disconnected -> connecting
+2026-03-24 15:07:11,000 - secs_driver.src.secs_driver - INFO - SECS Driver initialized: EQP001
+2026-03-24 15:07:11,000 - secs_driver.src.secs_driver - INFO - Starting SECS Driver...
+2026-03-24 15:07:11,000 - secs_driver.src.connection - INFO - Starting server on 192.168.2.5:5000
+2026-03-24 15:07:11,000 - secs_eap.services.recipe_service - INFO - Scanned 0 recipes
+2026-03-24 15:07:11,000 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connecting
+2026-03-24 15:07:11,001 - secs_driver.src.connection - INFO - Server listening on ('192.168.2.5', 5000)
+2026-03-24 15:07:11,001 - secs_driver.src.message_handler - INFO - Message handler started
+2026-03-24 15:07:11,001 - secs_driver.src.secs_driver - INFO - SECS Driver started successfully
+2026-03-24 15:07:11,001 - secs_eap.driver_adapter - INFO - Connected to 192.168.2.5:5000
+2026-03-24 15:07:11,001 - secs_eap.eap - INFO - EAP started successfully
+2026-03-24 15:07:13,670 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 52384)
+2026-03-24 15:07:13,671 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 52384)
+2026-03-24 15:07:13,671 - secs_driver.src.session - INFO - Session state changed: 0 -> 1
+2026-03-24 15:07:13,671 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-24 15:07:13,671 - secs_eap.driver_adapter - INFO - Connection state: connecting -> connected
+2026-03-24 15:07:13,671 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 1
+2026-03-24 15:07:13,671 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-24 15:07:13,672 - secs_driver.src.session - INFO - Session state changed: 1 -> 4
+2026-03-24 15:07:13,672 - secs_driver.src.secs_driver - INFO - State changed: 1 -> 4
+2026-03-24 15:07:13,672 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-24 15:07:13,672 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-24 15:07:13,672 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-24 15:07:16,852 - secs_eap.driver_adapter - INFO - RX
+S1F1 W
+2026-03-24 15:07:16,853 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher received: S1F1 (w_bit=True, items=0)
+2026-03-24 15:07:16,853 - secs_eap.message_handlers.s1_handler - INFO - Received S1F1: Are You There
+2026-03-24 15:07:16,854 - secs_eap.driver_adapter - INFO - TX-REPLY for S1F1
+S1F2
+  <A 'EAP001'>
+  <A 'V1.0.0'>
+2026-03-24 15:07:16,854 - secs_eap.message_handlers.dispatcher - INFO - Sent auto reply for S1F1
+2026-03-24 15:07:21,645 - secs_eap.driver_adapter - INFO - RX
+S6F11 W
+  <L [3]
+    <A>
+    <A>
+    <L [1]
+      <L [2]
+        <A>
+        <L [1]
+          <A>
+        >
+      >
+    >
+  >
+2026-03-24 15:07:21,646 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher received: S6F11 (w_bit=True, items=1)
+2026-03-24 15:07:21,646 - secs_eap.message_handlers.s6_handler - INFO - Received S6F11: Process Program Load Request
+2026-03-24 15:07:21,646 - secs_eap.driver_adapter - INFO - TX-REPLY for S6F11
+S6F12
+2026-03-24 15:07:21,647 - secs_eap.message_handlers.dispatcher - INFO - Sent auto reply for S6F11
+2026-03-24 15:07:21,647 - secs_eap.services.workflow_engine - INFO - Workflow matched: s6f11_then_send_s2f41 (trigger=S6F11)
+2026-03-24 15:07:21,647 - secs_eap.services.workflow_engine - INFO - Workflow step 1: send S2F41 wait_reply=True
+2026-03-24 15:07:21,648 - secs_eap.driver_adapter - INFO - TX
+S2F41 W
+  <L [2]
+    <A 'START'>
+    <L [1]
+      <L [2]
+        <A 'PPID'>
+        <A ''>
+      >
+    >
+  >
+2026-03-24 15:07:21,669 - secs_eap.driver_adapter - INFO - RX-REPLY
+S2F42
+  <L [2]
+    <B>
+    <L [1]
+      <L [2]
+        <A>
+        <B>
+      >
+    >
+  >
+2026-03-24 15:45:04,879 - secs_eap.eap - INFO - Received shutdown signal
+2026-03-24 15:45:04,879 - secs_eap.eap - INFO - Stopping EAP...
+2026-03-24 15:45:04,880 - secs_eap.driver_adapter - INFO - Connection state: selected -> disconnecting
+2026-03-24 15:45:04,880 - secs_driver.src.secs_driver - INFO - Stopping SECS Driver...
+2026-03-24 15:45:04,880 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnecting
+2026-03-24 15:45:04,880 - secs_driver.src.message_handler - ERROR - Send loop error: Lock is not acquired.
+2026-03-24 15:45:04,880 - secs_driver.src.message_handler - INFO - Message handler stopped
+2026-03-24 15:45:04,880 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 52384)
+2026-03-24 15:45:04,880 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 52384)
+2026-03-24 15:45:04,881 - secs_driver.src.session - INFO - Session state changed: 4 -> 0
+2026-03-24 15:45:04,881 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 52384)
+2026-03-24 15:45:04,881 - secs_eap.driver_adapter - INFO - Connection state: disconnecting -> disconnected
+2026-03-24 15:45:04,881 - secs_driver.src.connection - INFO - Server stopped
+2026-03-24 15:45:04,881 - secs_driver.src.secs_driver - INFO - SECS Driver stopped
+2026-03-24 15:45:04,881 - secs_eap.driver_adapter - INFO - Disconnected
+2026-03-24 15:45:04,881 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher stopped
+2026-03-24 15:45:04,881 - secs_eap.eap - INFO - EAP stopped
+2026-03-24 15:45:04,881 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 0
+2026-03-24 15:45:04,881 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnected
+2026-03-24 17:35:21,100 - secs_eap.eap - INFO - Initializing EAP components...
+2026-03-24 17:35:21,100 - secs_eap.services.workflow_engine - INFO - Loaded 1 inline workflow(s)
+2026-03-24 17:35:21,100 - secs_eap.driver_adapter - INFO - DriverAdapter initialized: EQP001
+2026-03-24 17:35:21,101 - secs_eap.eap - INFO - Registered 4 message handlers
+2026-03-24 17:35:21,101 - secs_eap.eap - INFO - EAP components initialized
+2026-03-24 17:35:21,101 - secs_eap.eap - INFO - Starting EAP...
+2026-03-24 17:35:21,101 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher started
+2026-03-24 17:35:21,101 - secs_eap.driver_adapter - INFO - Connection state: disconnected -> connecting
+2026-03-24 17:35:21,101 - secs_driver.src.secs_driver - INFO - SECS Driver initialized: EQP001
+2026-03-24 17:35:21,101 - secs_driver.src.secs_driver - INFO - Starting SECS Driver...
+2026-03-24 17:35:21,101 - secs_driver.src.connection - INFO - Starting server on 192.168.2.5:5000
+2026-03-24 17:35:21,101 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connecting
+2026-03-24 17:35:21,101 - secs_driver.src.connection - INFO - Server listening on ('192.168.2.5', 5000)
+2026-03-24 17:35:21,101 - secs_driver.src.message_handler - INFO - Message handler started
+2026-03-24 17:35:21,101 - secs_driver.src.secs_driver - INFO - SECS Driver started successfully
+2026-03-24 17:35:21,101 - secs_eap.driver_adapter - INFO - Connected to 192.168.2.5:5000
+2026-03-24 17:35:21,101 - secs_eap.eap - ERROR - MES MQ connect failed: pymqi is required for IBM MQ integration
+2026-03-24 17:35:21,101 - secs_eap.eap - INFO - EAP started successfully
+2026-03-24 17:35:36,960 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 54564)
+2026-03-24 17:35:36,961 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 54564)
+2026-03-24 17:35:36,961 - secs_driver.src.session - INFO - Session state changed: 0 -> 1
+2026-03-24 17:35:36,962 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-24 17:35:36,962 - secs_eap.driver_adapter - INFO - Connection state: connecting -> connected
+2026-03-24 17:35:36,962 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 1
+2026-03-24 17:35:36,962 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-24 17:35:36,963 - secs_driver.src.session - INFO - Session state changed: 1 -> 4
+2026-03-24 17:35:36,963 - secs_driver.src.secs_driver - INFO - State changed: 1 -> 4
+2026-03-24 17:35:36,963 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-24 17:35:36,963 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-24 17:35:36,964 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-24 17:35:38,993 - secs_eap.driver_adapter - INFO - RX
+S1F1 W
+2026-03-24 17:35:38,993 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher received: S1F1 (w_bit=True, items=0)
+2026-03-24 17:35:38,993 - secs_eap.message_handlers.s1_handler - INFO - Received S1F1: Are You There
+2026-03-24 17:35:38,994 - secs_eap.driver_adapter - INFO - TX-REPLY for S1F1
+S1F2
+  <A 'EAP001'>
+  <A 'V1.0.0'>
+2026-03-24 17:35:38,994 - secs_eap.message_handlers.dispatcher - INFO - Sent auto reply for S1F1
+2026-03-24 17:35:45,600 - secs_eap.driver_adapter - INFO - RX
+S6F11 W
+  <L [3]
+    <A>
+    <A>
+    <L [1]
+      <L [2]
+        <A>
+        <L [1]
+          <A>
+        >
+      >
+    >
+  >
+2026-03-24 17:35:45,601 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher received: S6F11 (w_bit=True, items=1)
+2026-03-24 17:35:45,601 - secs_eap.message_handlers.s6_handler - INFO - Received S6F11: Process Program Load Request
+2026-03-24 17:35:45,601 - secs_eap.driver_adapter - INFO - TX-REPLY for S6F11
+S6F12
+2026-03-24 17:35:45,601 - secs_eap.message_handlers.dispatcher - INFO - Sent auto reply for S6F11
+2026-03-24 17:35:45,601 - secs_eap.services.workflow_engine - INFO - Workflow matched: s6f11_then_query_mes_apvryope (trigger=S6F11)
+2026-03-24 17:35:45,601 - secs_eap.services.workflow_engine - INFO - Workflow step 1: MES MQ TX APVRYOPE (eqpt_id=E_CLN_01 port_id=01 crr_id=CRR009 user_id=IBM)
+2026-03-24 17:35:45,611 - secs_eap.services.workflow_engine - ERROR - Workflow step 1 MES MQ failed: MES MQ not connected
+2026-03-24 22:50:24,761 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 54550)
+2026-03-24 22:50:24,766 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 54550)
+2026-03-24 22:50:24,767 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-24 22:50:24,767 - secs_eap.driver_adapter - INFO - Connection state: selected -> connected
+2026-03-24 22:50:24,767 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-24 22:50:24,768 - secs_driver.src.session - INFO - Session state changed: 4 -> 4
+2026-03-24 22:50:24,768 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 4
+2026-03-24 22:50:24,768 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-24 22:50:24,768 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-24 22:50:24,769 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-24 23:41:51,583 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 55142)
+2026-03-24 23:41:51,584 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 55142)
+2026-03-24 23:41:51,584 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-24 23:41:51,584 - secs_eap.driver_adapter - INFO - Connection state: selected -> connected
+2026-03-24 23:41:51,584 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-24 23:41:51,585 - secs_driver.src.session - INFO - Session state changed: 4 -> 4
+2026-03-24 23:41:51,585 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 4
+2026-03-24 23:41:51,585 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-24 23:41:51,585 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-24 23:41:51,585 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-25 00:46:30,450 - secs_driver.src.session - INFO - Session state changed: 4 -> 0
+2026-03-25 00:46:30,451 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 0
+2026-03-25 00:46:30,451 - secs_eap.driver_adapter - INFO - Received Separate request
+2026-03-25 00:46:30,452 - secs_eap.driver_adapter - INFO - Connection state: selected -> connected
+2026-03-25 00:46:30,452 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 00:46:30,452 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 55142)
+2026-03-25 00:46:30,453 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 55142)
+2026-03-25 00:46:30,453 - secs_driver.src.session - INFO - Session state changed: 0 -> 0
+2026-03-25 00:46:30,453 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 55142)
+2026-03-25 00:46:30,453 - secs_eap.driver_adapter - INFO - Connection state: connected -> disconnected
+2026-03-25 00:46:30,453 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 0
+2026-03-25 00:46:30,453 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnected
+2026-03-25 00:46:32,650 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 54564)
+2026-03-25 00:46:32,651 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 54564)
+2026-03-25 00:46:32,651 - secs_driver.src.session - INFO - Session state changed: 0 -> 0
+2026-03-25 00:46:32,651 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 54564)
+2026-03-25 00:46:32,651 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 0
+2026-03-25 01:21:51,910 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 54550)
+2026-03-25 01:21:51,911 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 54550)
+2026-03-25 01:21:51,911 - secs_driver.src.session - INFO - Session state changed: 0 -> 0
+2026-03-25 01:21:51,912 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 54550)
+2026-03-25 01:21:51,912 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 0
+2026-03-25 02:12:16,752 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 56457)
+2026-03-25 02:12:16,752 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 56457)
+2026-03-25 02:12:16,752 - secs_driver.src.session - INFO - Session state changed: 0 -> 1
+2026-03-25 02:12:16,753 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-25 02:12:16,753 - secs_eap.driver_adapter - INFO - Connection state: disconnected -> connected
+2026-03-25 02:12:16,753 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 1
+2026-03-25 02:12:16,753 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 02:12:16,753 - secs_driver.src.session - INFO - Session state changed: 1 -> 4
+2026-03-25 02:12:16,754 - secs_driver.src.secs_driver - INFO - State changed: 1 -> 4
+2026-03-25 02:12:16,754 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-25 02:12:16,754 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-25 02:12:16,754 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-25 03:01:57,038 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 56915)
+2026-03-25 03:01:57,041 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 56915)
+2026-03-25 03:01:57,041 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-25 03:01:57,041 - secs_eap.driver_adapter - INFO - Connection state: selected -> connected
+2026-03-25 03:01:57,042 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 03:01:57,042 - secs_driver.src.session - INFO - Session state changed: 4 -> 4
+2026-03-25 03:01:57,043 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 4
+2026-03-25 03:01:57,043 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-25 03:01:57,043 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-25 03:01:57,043 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-25 04:49:05,399 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 57805)
+2026-03-25 04:49:05,400 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 57805)
+2026-03-25 04:49:05,400 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-25 04:49:05,401 - secs_eap.driver_adapter - INFO - Connection state: selected -> connected
+2026-03-25 04:49:05,401 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 04:49:05,401 - secs_driver.src.session - INFO - Session state changed: 4 -> 4
+2026-03-25 04:49:05,401 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 4
+2026-03-25 04:49:05,401 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-25 04:49:05,401 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-25 04:49:05,401 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-25 05:56:29,213 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 56457)
+2026-03-25 05:56:29,225 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 56457)
+2026-03-25 05:56:29,226 - secs_driver.src.session - INFO - Session state changed: 4 -> 0
+2026-03-25 05:56:29,226 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 56457)
+2026-03-25 05:56:29,228 - secs_eap.driver_adapter - INFO - Connection state: selected -> disconnected
+2026-03-25 05:56:29,229 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 0
+2026-03-25 05:56:29,229 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnected
+2026-03-25 06:04:26,800 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 56915)
+2026-03-25 06:04:26,801 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 56915)
+2026-03-25 06:04:26,802 - secs_driver.src.session - INFO - Session state changed: 0 -> 0
+2026-03-25 06:04:26,802 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 56915)
+2026-03-25 06:04:26,802 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 0
+2026-03-25 06:04:41,821 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 57805)
+2026-03-25 06:04:41,823 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 57805)
+2026-03-25 06:04:41,823 - secs_driver.src.session - INFO - Session state changed: 0 -> 0
+2026-03-25 06:04:41,824 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 57805)
+2026-03-25 06:04:41,824 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 0
+2026-03-25 06:04:47,512 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 58488)
+2026-03-25 06:04:47,513 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 58488)
+2026-03-25 06:04:47,513 - secs_driver.src.session - INFO - Session state changed: 0 -> 1
+2026-03-25 06:04:47,513 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-25 06:04:47,513 - secs_eap.driver_adapter - INFO - Connection state: disconnected -> connected
+2026-03-25 06:04:47,514 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 1
+2026-03-25 06:04:47,514 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 06:04:47,515 - secs_driver.src.session - INFO - Session state changed: 1 -> 4
+2026-03-25 06:04:47,515 - secs_driver.src.secs_driver - INFO - State changed: 1 -> 4
+2026-03-25 06:04:47,515 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-25 06:04:47,515 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-25 06:04:47,516 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-25 07:00:05,010 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 59063)
+2026-03-25 07:00:05,010 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 59063)
+2026-03-25 07:00:05,011 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-25 07:00:05,011 - secs_eap.driver_adapter - INFO - Connection state: selected -> connected
+2026-03-25 07:00:05,011 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 07:00:05,011 - secs_driver.src.session - INFO - Session state changed: 4 -> 4
+2026-03-25 07:00:05,012 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 4
+2026-03-25 07:00:05,012 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-25 07:00:05,012 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-25 07:00:05,012 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-25 07:52:23,489 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 59865)
+2026-03-25 07:52:23,491 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 59865)
+2026-03-25 07:52:23,491 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-25 07:52:23,491 - secs_eap.driver_adapter - INFO - Connection state: selected -> connected
+2026-03-25 07:52:23,492 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 07:52:23,492 - secs_driver.src.session - INFO - Session state changed: 4 -> 4
+2026-03-25 07:52:23,493 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 4
+2026-03-25 07:52:23,493 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-25 07:52:23,493 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-25 07:52:23,494 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-25 08:05:22,645 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 58488)
+2026-03-25 08:05:22,645 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 58488)
+2026-03-25 08:05:22,645 - secs_driver.src.session - INFO - Session state changed: 4 -> 0
+2026-03-25 08:05:22,646 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 58488)
+2026-03-25 08:05:22,646 - secs_eap.driver_adapter - INFO - Connection state: selected -> disconnected
+2026-03-25 08:05:22,646 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 0
+2026-03-25 08:05:22,646 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnected
+2026-03-25 08:05:23,150 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 59865)
+2026-03-25 08:05:23,151 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 59865)
+2026-03-25 08:05:23,151 - secs_driver.src.session - INFO - Session state changed: 0 -> 0
+2026-03-25 08:05:23,151 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 59865)
+2026-03-25 08:05:23,151 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 0
+2026-03-25 08:05:33,164 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 60093)
+2026-03-25 08:05:33,165 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 60093)
+2026-03-25 08:05:33,165 - secs_driver.src.session - INFO - Session state changed: 0 -> 1
+2026-03-25 08:05:33,166 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-25 08:05:33,166 - secs_eap.driver_adapter - INFO - Connection state: disconnected -> connected
+2026-03-25 08:05:33,166 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 1
+2026-03-25 08:05:33,166 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 08:05:33,167 - secs_driver.src.session - INFO - Session state changed: 1 -> 4
+2026-03-25 08:05:33,167 - secs_driver.src.secs_driver - INFO - State changed: 1 -> 4
+2026-03-25 08:05:33,168 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-25 08:05:33,168 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-25 08:05:33,169 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-25 08:57:54,868 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 59063)
+2026-03-25 08:57:54,868 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 60093)
+2026-03-25 08:57:54,869 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 59063)
+2026-03-25 08:57:54,870 - secs_driver.src.session - INFO - Session state changed: 4 -> 0
+2026-03-25 08:57:54,872 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 59063)
+2026-03-25 08:57:54,872 - secs_eap.driver_adapter - INFO - Connection state: selected -> disconnected
+2026-03-25 08:57:54,873 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 60093)
+2026-03-25 08:57:54,873 - secs_driver.src.session - INFO - Session state changed: 0 -> 0
+2026-03-25 08:57:54,873 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 60093)
+2026-03-25 08:57:54,876 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 0
+2026-03-25 08:57:54,877 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnected
+2026-03-25 08:57:54,877 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 0
+2026-03-25 08:58:04,931 - secs_driver.src.connection - INFO - Client connected from ('192.168.2.5', 60851)
+2026-03-25 08:58:04,932 - secs_driver.src.secs_driver - INFO - Client connected from ('192.168.2.5', 60851)
+2026-03-25 08:58:04,933 - secs_driver.src.session - INFO - Session state changed: 0 -> 1
+2026-03-25 08:58:04,933 - secs_eap.driver_adapter - INFO - TCP connected, session_id=0
+2026-03-25 08:58:04,933 - secs_eap.driver_adapter - INFO - Connection state: disconnected -> connected
+2026-03-25 08:58:04,933 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 1
+2026-03-25 08:58:04,933 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 08:58:04,934 - secs_driver.src.session - INFO - Session state changed: 1 -> 4
+2026-03-25 08:58:04,934 - secs_driver.src.secs_driver - INFO - State changed: 1 -> 4
+2026-03-25 08:58:04,935 - secs_eap.driver_adapter - INFO - Session selected
+2026-03-25 08:58:04,935 - secs_eap.driver_adapter - INFO - Connection state: connected -> selected
+2026-03-25 08:58:04,935 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to selected
+2026-03-25 09:00:42,230 - secs_eap.driver_adapter - INFO - RX
+S1F13 W
+  <L [2]
+    <A>
+    <A>
+  >
+2026-03-25 09:00:42,232 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher received: S1F13 (w_bit=True, items=1)
+2026-03-25 09:00:42,232 - secs_eap.message_handlers.s1_handler - INFO - Received S1F13: Establish Communications Request
+2026-03-25 09:00:42,232 - secs_eap.driver_adapter - INFO - TX-REPLY for S1F13
+S1F14
+  <U1 0>
+  <A 'EAP001'>
+  <A 'V1.0.0'>
+2026-03-25 09:00:42,232 - secs_eap.message_handlers.dispatcher - INFO - Sent auto reply for S1F13
+2026-03-25 09:00:45,378 - secs_driver.src.session - INFO - Session state changed: 4 -> 0
+2026-03-25 09:00:45,379 - secs_driver.src.secs_driver - INFO - State changed: 4 -> 0
+2026-03-25 09:00:45,379 - secs_eap.driver_adapter - INFO - Received Separate request
+2026-03-25 09:00:45,379 - secs_eap.driver_adapter - INFO - Connection state: selected -> connected
+2026-03-25 09:00:45,379 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to connected
+2026-03-25 09:00:45,894 - secs_driver.src.connection - INFO - Client disconnected: ('192.168.2.5', 60851)
+2026-03-25 09:00:45,895 - secs_driver.src.secs_driver - INFO - Client disconnected: ('192.168.2.5', 60851)
+2026-03-25 09:00:45,895 - secs_driver.src.session - INFO - Session state changed: 0 -> 0
+2026-03-25 09:00:45,895 - secs_eap.driver_adapter - INFO - TCP disconnected: Client disconnected: ('192.168.2.5', 60851)
+2026-03-25 09:00:45,895 - secs_eap.driver_adapter - INFO - Connection state: connected -> disconnected
+2026-03-25 09:00:45,896 - secs_driver.src.secs_driver - INFO - State changed: 0 -> 0
+2026-03-25 09:00:45,896 - secs_eap.message_handlers.dispatcher - INFO - Dispatcher: connection state changed to disconnected
+2026-03-26 13:05:36,784 - secs_eap.eap - INFO - Received shutdown signal
+2026-03-26 13:05:36,786 - secs_eap.eap - INFO - Stopping EAP...
+2026-03-26 13:05:36,787 - secs_eap.message_handlers.dispatcher - INFO - MessageDispatcher stopped
+2026-03-26 13:05:36,787 - secs_eap.eap - INFO - EAP stopped

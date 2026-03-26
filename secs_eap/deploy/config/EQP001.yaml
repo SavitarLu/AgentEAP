@@ -1,0 +1,35 @@
+equipment:
+  name: "EQP001"
+  host: "192.168.2.5"
+  port: 5000
+  mode: "passive"
+  device_id: 0
+
+message_handler: {}
+
+mes_mq:
+  enabled: true
+  mq_conn_list:
+    QM1: "MESDEVGW1/MESDEVGW1.SVRCONN/95.40.166.36(51419)"
+    QM2: "MESDEVGW2/MESDEVGW2.SVRCONN/95.40.166.36(51420)"
+  mq_listener:
+    MQ1: "QM1/F01.TCS.SHARE/E_CLN_01"
+    MQ2: "QM2/F01.TCS.SHARE/E_CLN_01"
+  mq_sender:
+    MQ1: "QM1"
+  timeout_ms: 5000
+
+business_logic:
+  workflows:
+    - name: "s6f11_then_query_mes_apvryope"
+      trigger:
+        sf: "S6F11"
+      steps:
+        - action: "mes_apvryope"
+          transaction:
+            trx_id: "APVRYOPE"
+            type_id: "I"
+            eqpt_id: "E_CLN_01"
+            port_id: "01"
+            crr_id: "CRR009"
+            user_id: "IBM"
