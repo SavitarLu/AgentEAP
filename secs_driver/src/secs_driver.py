@@ -15,6 +15,7 @@ from .message_handler import MessageHandler
 from .secs_message import SECSMessage, SECSItem
 from .secs_parser import SECSEncoder, SECSParser
 from .hsms_protocol import HSMSConnectionState, HSMSProtocolHandler, HSMSConnectionStateMachine
+from .logging_utils import RuntimeLogFormatter
 
 
 logger = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ class SECSDriver:
         log_config = self.config.logging
 
         # 创建日志格式
-        formatter = logging.Formatter(
+        formatter = RuntimeLogFormatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         )
 

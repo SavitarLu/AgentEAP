@@ -5,12 +5,11 @@ S6: Data Collection
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from secs_driver.src.secs_message import SECSMessage, SECSItem
-from secs_driver.src.secs_types import SECSType
 
-from .base_handler import BaseMessageHandler, HandlerResult, HandlerPriority
+from .base_handler import BaseMessageHandler, HandlerResult, StreamHandlerManager
 
 
 logger = logging.getLogger(__name__)
@@ -120,7 +119,7 @@ class S6F5Handler(BaseMessageHandler):
 
 
 class S6F11Handler(BaseMessageHandler):
-    """S6F11 - Process Program Load Request"""
+    """S6F11 - Event Report Send"""
 
     def __init__(self):
         super().__init__("S6F11Handler")
@@ -130,55 +129,55 @@ class S6F11Handler(BaseMessageHandler):
 
     async def handle(self, message: SECSMessage, context: Dict[str, Any]) -> HandlerResult:
         """处理 S6F11"""
-        logger.info("Received S6F11: Process Program Load Request")
+        logger.info("Received S6F11: Event Report Send")
+
+        event_payload = None
+        data_service = context.get("data_collection_service")
+        if data_service:
+            try:
+                event_payload = await data_service.report_collection_event(message)
+            except Exception as e:
+                logger.error(f"Failed to parse collection event: {e}")
+
+        if event_payload:
+            event_data = event_payload.to_dict()
+            context["collection_event"] = event_data
+            context["collection_event_payload"] = event_payload
+            context["last_collection_event"] = event_data
+            logger.info(
+                "Resolved S6F11 event: ceid=%s name=%s reports=%d fields=%s",
+                event_data["ceid"],
+                event_data["name"],
+                len(event_data["reports"]),
+                list(event_data["fields"].keys()),
+            )
+        else:
+            context.pop("collection_event", None)
+            context.pop("collection_event_payload", None)
 
         return HandlerResult(
             success=True,
-            message="S6F11 handled (recipe logic removed)",
+            message="S6F11 handled",
             reply_items=[],
+            data=event_payload.to_dict() if event_payload else None,
         )
 
 
-class S6HandlerManager(BaseMessageHandler):
+class S6HandlerManager(StreamHandlerManager):
     """S6 系列消息管理器"""
 
     def __init__(self):
-        super().__init__("S6HandlerManager")
-        self._priority = HandlerPriority.HIGH
-
-        # 创建具体的处理器
         self._s6f1 = S6F1Handler()
         self._s6f3 = S6F3Handler()
         self._s6f5 = S6F5Handler()
         self._s6f11 = S6F11Handler()
-
-        # S-F 到处理器的映射
-        self._handler_map = {
-            (6, 1): self._s6f1,
-            (6, 3): self._s6f3,
-            (6, 5): self._s6f5,
-            (6, 11): self._s6f11,
-        }
-
-    def can_handle(self, message: SECSMessage) -> bool:
-        return message.stream == 6
-
-    async def handle(self, message: SECSMessage, context: Dict[str, Any]) -> HandlerResult:
-        """分发到对应的处理器"""
-        handler = self._handler_map.get((message.stream, message.function))
-
-        if handler is None:
-            logger.warning(f"No handler for S6F{message.function}")
-            return HandlerResult(
-                success=False,
-                message=f"No handler for S6F{message.function}",
-            )
-
-        return await handler.handle(message, context)
-
-    def register_handlers(self, registry) -> None:
-        """注册所有 S6 处理器"""
-        registry.register(self._s6f1, stream=6, function=1)
-        registry.register(self._s6f3, stream=6, function=3)
-        registry.register(self._s6f5, stream=6, function=5)
-        registry.register(self._s6f11, stream=6, function=11)
+        super().__init__(
+            "S6HandlerManager",
+            stream=6,
+            handler_map={
+                (6, 1): self._s6f1,
+                (6, 3): self._s6f3,
+                (6, 5): self._s6f5,
+                (6, 11): self._s6f11,
+            },
+        )

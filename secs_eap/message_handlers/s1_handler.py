@@ -4,15 +4,13 @@ S1 系列消息处理器
 S1: Communications
 """
 
-import asyncio
 import logging
 from typing import Dict, Any
-from datetime import datetime
 
-from secs_driver.src.secs_message import SECSMessage, SECSItem, SECSItem as Item
+from secs_driver.src.secs_message import SECSMessage, SECSItem as Item
 from secs_driver.src.secs_types import SECSType
 
-from .base_handler import BaseMessageHandler, HandlerResult, HandlerPriority
+from .base_handler import BaseMessageHandler, HandlerResult, StreamHandlerManager
 from ..driver_adapter import DriverAdapter
 
 
@@ -155,7 +153,7 @@ class S1F17Handler(BaseMessageHandler):
         )
 
 
-class S1HandlerManager(BaseMessageHandler):
+class S1HandlerManager(StreamHandlerManager):
     """
     S1 系列消息管理器
 
@@ -163,42 +161,17 @@ class S1HandlerManager(BaseMessageHandler):
     """
 
     def __init__(self, driver_adapter: DriverAdapter):
-        super().__init__("S1HandlerManager")
-        self._priority = HandlerPriority.HIGH
-
-        # 创建具体的处理器
         self._s1f1 = S1F1Handler(driver_adapter)
         self._s1f3 = S1F3Handler(driver_adapter)
         self._s1f13 = S1F13Handler(driver_adapter)
         self._s1f17 = S1F17Handler(driver_adapter)
-
-        # S-F 到处理器的映射
-        self._handler_map = {
-            (1, 1): self._s1f1,
-            (1, 3): self._s1f3,
-            (1, 13): self._s1f13,
-            (1, 17): self._s1f17,
-        }
-
-    def can_handle(self, message: SECSMessage) -> bool:
-        return message.stream == 1
-
-    async def handle(self, message: SECSMessage, context: Dict[str, Any]) -> HandlerResult:
-        """根据具体的 Function 分发到对应的处理器"""
-        handler = self._handler_map.get((message.stream, message.function))
-
-        if handler is None:
-            logger.warning(f"No handler for S1F{message.function}")
-            return HandlerResult(
-                success=False,
-                message=f"No handler for S1F{message.function}",
-            )
-
-        return await handler.handle(message, context)
-
-    def register_handlers(self, registry) -> None:
-        """注册所有 S1 处理器"""
-        registry.register(self._s1f1, stream=1, function=1)
-        registry.register(self._s1f3, stream=1, function=3)
-        registry.register(self._s1f13, stream=1, function=13)
-        registry.register(self._s1f17, stream=1, function=17)
+        super().__init__(
+            "S1HandlerManager",
+            stream=1,
+            handler_map={
+                (1, 1): self._s1f1,
+                (1, 3): self._s1f3,
+                (1, 13): self._s1f13,
+                (1, 17): self._s1f17,
+            },
+        )

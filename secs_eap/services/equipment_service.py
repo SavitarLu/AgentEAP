@@ -4,11 +4,9 @@
 管理设备状态、变量、命令执行等。
 """
 
-import asyncio
 import logging
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from enum import Enum
 
 from secs_driver.src.secs_message import SECSItem
@@ -111,27 +109,29 @@ class EquipmentService:
         await self._update_status_cache()
         return self._status_data_cache
 
+    def _build_secs_item(self, data_type: str, value: Any) -> SECSItem:
+        """按变量类型生成 SECSItem。"""
+        if data_type == "ASCII":
+            return SECSItem.ascii(str(value) if value is not None else "")
+        if data_type == "UINT1":
+            return SECSItem.uint1(int(value or 0))
+        if data_type == "UINT2":
+            return SECSItem.uint2(int(value or 0))
+        if data_type == "UINT4":
+            return SECSItem.uint4(int(value or 0))
+        if data_type == "BINARY":
+            return SECSItem.binary(value or b"")
+        return SECSItem.ascii(str(value) if value is not None else "")
+
     async def _update_status_cache(self) -> None:
         """更新状态数据缓存"""
         self._status_data_cache = []
 
         for vid, var in sorted(self._variables.items()):
             try:
-                if var.data_type == "ASCII":
-                    value_str = str(var.value) if var.value is not None else ""
-                    item = SECSItem.ascii(value_str)
-                elif var.data_type == "UINT1":
-                    item = SECSItem.uint1(int(var.value or 0))
-                elif var.data_type == "UINT2":
-                    item = SECSItem.uint2(int(var.value or 0))
-                elif var.data_type == "UINT4":
-                    item = SECSItem.uint4(int(var.value or 0))
-                elif var.data_type == "BINARY":
-                    item = SECSItem.binary(var.value or b"")
-                else:
-                    item = SECSItem.ascii(str(var.value or ""))
-
-                self._status_data_cache.append(item)
+                self._status_data_cache.append(
+                    self._build_secs_item(var.data_type, var.value)
+                )
             except Exception as e:
                 logger.error(f"Failed to format variable {var.name}: {e}")
                 self._status_data_cache.append(SECSItem.ascii(""))
@@ -164,17 +164,7 @@ class EquipmentService:
             var = self._variables.get(vid)
             if var:
                 try:
-                    if var.data_type == "ASCII":
-                        item = SECSItem.ascii(str(var.value or ""))
-                    elif var.data_type == "UINT1":
-                        item = SECSItem.uint1(int(var.value or 0))
-                    elif var.data_type == "UINT2":
-                        item = SECSItem.uint2(int(var.value or 0))
-                    elif var.data_type == "BINARY":
-                        item = SECSItem.binary(var.value or b"")
-                    else:
-                        item = SECSItem.ascii(str(var.value or ""))
-                    result.append(item)
+                    result.append(self._build_secs_item(var.data_type, var.value))
                 except Exception as e:
                     logger.error(f"Failed to format variable {vid}: {e}")
                     result.append(SECSItem.ascii(""))

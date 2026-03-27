@@ -6,12 +6,10 @@
 
 import asyncio
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-
-from secs_driver.src.secs_message import SECSItem
 
 
 logger = logging.getLogger(__name__)
@@ -70,10 +68,10 @@ class ProcessService:
         self._job_history: List[ProcessJob] = []
 
         # 事件回调
-        self._on_job_started: Optional[callable] = None
-        self._on_job_completed: Optional[callable] = None
-        self._on_job_aborted: Optional[callable] = None
-        self._on_process_event: Optional[callable] = None
+        self._on_job_started: Optional[Callable] = None
+        self._on_job_completed: Optional[Callable] = None
+        self._on_job_aborted: Optional[Callable] = None
+        self._on_process_event: Optional[Callable] = None
 
         # 设备服务引用
         self._equipment_service = None
@@ -84,16 +82,25 @@ class ProcessService:
 
     def set_callbacks(
         self,
-        on_job_started: Optional[callable] = None,
-        on_job_completed: Optional[callable] = None,
-        on_job_aborted: Optional[callable] = None,
-        on_process_event: Optional[callable] = None,
+        on_job_started: Optional[Callable] = None,
+        on_job_completed: Optional[Callable] = None,
+        on_job_aborted: Optional[Callable] = None,
+        on_process_event: Optional[Callable] = None,
     ) -> None:
         """设置回调函数"""
         self._on_job_started = on_job_started
         self._on_job_completed = on_job_completed
         self._on_job_aborted = on_job_aborted
         self._on_process_event = on_process_event
+
+    async def _invoke_callback(self, callback: Optional[Callable], *args) -> None:
+        """统一处理同步/异步回调。"""
+        if not callback:
+            return
+
+        result = callback(*args)
+        if asyncio.iscoroutine(result):
+            await result
 
     async def create_job(
         self,
@@ -159,8 +166,7 @@ class ProcessService:
             await self._equipment_service.set_state(EquipmentState.RUNNING)
 
         # 触发回调
-        if self._on_job_started:
-            await self._on_job_started(job)
+        await self._invoke_callback(self._on_job_started, job)
 
         # 启动作业处理
         asyncio.create_task(self._process_job(job))
@@ -199,6 +205,7 @@ class ProcessService:
                 await self._emit_event("PROCESS_COMPLETE", {
                     "job_id": job.job_id,
                 })
+                await self._invoke_callback(self._on_job_completed, job)
 
                 logger.info(f"Job completed: {job.job_id}")
 
@@ -236,13 +243,14 @@ class ProcessService:
             是否成功
         """
         job = self._current_job
-        if job_id and job.job_id != job_id:
-            # 从队列中找到作业
-            for q_job in self._job_queue:
-                if q_job.job_id == job_id:
-                    self._job_queue.remove(q_job)
-                    job = q_job
-                    break
+        if job_id:
+            if not job or job.job_id != job_id:
+                job = None
+                for q_job in self._job_queue:
+                    if q_job.job_id == job_id:
+                        self._job_queue.remove(q_job)
+                        job = q_job
+                        break
 
         if not job:
             return False
@@ -252,8 +260,7 @@ class ProcessService:
 
         logger.info(f"Job aborted: {job.job_id}")
 
-        if self._on_job_aborted:
-            await self._on_job_aborted(job)
+        await self._invoke_callback(self._on_job_aborted, job)
 
         return True
 
@@ -283,8 +290,7 @@ class ProcessService:
 
     async def _emit_event(self, event_name: str, data: Dict) -> None:
         """发送流程事件"""
-        if self._on_process_event:
-            await self._on_process_event(event_name, data)
+        await self._invoke_callback(self._on_process_event, event_name, data)
 
     def get_current_job(self) -> Optional[ProcessJob]:
         """获取当前作业"""

@@ -12,6 +12,7 @@ from enum import Enum
 
 from secs_driver.src.config import DriverConfig, ConnectionConfig, HSMSConfig, LoggingConfig
 from secs_driver.src.secs_driver import SECSDriver, SECSEventHandler, SECSMessage, SECSItem
+from secs_driver.src.logging_utils import format_tagged_block
 from secs_driver.src.secs_types import SECSTypeInfo
 from secs_driver.src.hsms_protocol import HSMSConnectionState
 
@@ -27,8 +28,6 @@ def _format_scalar_value(value: Any) -> str:
     if isinstance(value, bytes):
         hex_value = value.hex().upper()
         return f" 0x{hex_value}" if hex_value else " 0x"
-    if isinstance(value, str):
-        return f" '{value}'"
     return f" {value}"
 
 
@@ -37,10 +36,9 @@ def _format_item_standard(item: SECSItem, indent: int = 0) -> List[str]:
     type_name = SECSTypeInfo.get_name(item.type)
 
     if type_name == "L":
-        lines = [f"{pad}<L [{len(item.children)}]"]
+        lines = [f"{pad}L, {len(item.children)}"]
         for child in item.children:
             lines.extend(_format_item_standard(child, indent + 1))
-        lines.append(f"{pad}>")
         return lines
 
     return [f"{pad}<{type_name}{_format_scalar_value(item.value)}>"]
@@ -51,6 +49,14 @@ def _format_message_standard(message: SECSMessage) -> str:
     for item in message.items or []:
         lines.extend(_format_item_standard(item, 1))
     return "\n".join(lines)
+
+
+def _log_secs_block(message: SECSMessage) -> None:
+    logger.info(
+        "%s",
+        format_tagged_block(_format_message_standard(message), "S"),
+        extra={"raw_log": True},
+    )
 
 
 class ConnectionState(Enum):
@@ -165,7 +171,7 @@ class DriverAdapter(SECSEventHandler):
 
     def on_message_received(self, message: SECSMessage) -> None:
         """收到 SECS-II 消息"""
-        logger.info("RX\n%s", _format_message_standard(message))
+        _log_secs_block(message)
         self._invoke_callback(self._on_message_received, message)
 
     def on_message_sent(self, message: SECSMessage) -> None:
@@ -298,10 +304,7 @@ class DriverAdapter(SECSEventHandler):
                 device_id=self._config.device_id,
                 items=items or [],
             )
-            logger.info(
-                "TX\n%s",
-                _format_message_standard(tx_preview),
-            )
+            _log_secs_block(tx_preview)
             reply = await self._driver.send_message(
                 stream=stream,
                 function=function,
@@ -310,7 +313,7 @@ class DriverAdapter(SECSEventHandler):
                 timeout=timeout,
             )
             if reply:
-                logger.info("RX-REPLY\n%s", _format_message_standard(reply))
+                _log_secs_block(reply)
             return reply
         except Exception as e:
             logger.error(f"Send message error: {e}")
@@ -338,7 +341,14 @@ class DriverAdapter(SECSEventHandler):
             return
 
         try:
-            logger.info("TX-ASYNC S%sF%s", stream, function)
+            tx_preview = SECSMessage(
+                stream=stream,
+                function=function,
+                w_bit=callback is not None,
+                device_id=self._config.device_id,
+                items=items or [],
+            )
+            _log_secs_block(tx_preview)
             await self._driver.send_message_async(
                 stream=stream,
                 function=function,
@@ -369,11 +379,7 @@ class DriverAdapter(SECSEventHandler):
 
         try:
             preview_reply = original_message.create_reply(items)
-            logger.info(
-                "TX-REPLY for %s\n%s",
-                original_message.sf,
-                _format_message_standard(preview_reply),
-            )
+            _log_secs_block(preview_reply)
             return await self._driver.send_reply(original_message, items)
         except Exception as e:
             logger.error(f"Send reply error: {e}")

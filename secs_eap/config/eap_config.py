@@ -130,6 +130,7 @@ class BusinessLogicConfig:
     # 数据收集配置
     data_collection_interval: float = 1.0
     trace_data_buffer_size: int = 10000
+    collection_events: Dict = field(default_factory=dict)
 
     # 工艺流程配置
     default_process_sequence: List[str] = field(default_factory=list)

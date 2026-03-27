@@ -12,6 +12,12 @@ from collections import deque
 
 from secs_driver.src.secs_message import SECSItem
 
+from .collection_events import (
+    CollectionEventParser,
+    CollectionEventPayload,
+    CollectionEventSchema,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +33,11 @@ class DataCollectionService:
     - 数据查询
     """
 
-    def __init__(self, buffer_size: int = 10000):
+    def __init__(
+        self,
+        buffer_size: int = 10000,
+        collection_event_config: Optional[Dict[str, Any]] = None,
+    ):
         self._buffer_size = buffer_size
 
         # 收集的数据缓存
@@ -39,6 +49,11 @@ class DataCollectionService:
 
         # 事件定义
         self._event_definitions: Dict[int, Dict] = {}
+
+        # S6F11 Collection Event 定义
+        self._collection_event_parser = CollectionEventParser(
+            CollectionEventSchema.from_dict(collection_event_config)
+        )
 
         # 数据订阅者
         self._subscribers: List[callable] = []
@@ -241,6 +256,28 @@ class DataCollectionService:
         """
         self._event_definitions[event_id] = definition
         logger.info(f"Event {event_id} defined")
+
+    def set_collection_event_schema(self, config: Optional[Dict[str, Any]]) -> None:
+        """设置 S6F11 Collection Event 配置。"""
+        self._collection_event_parser.set_schema(CollectionEventSchema.from_dict(config))
+
+    def parse_collection_event(self, message) -> Optional[CollectionEventPayload]:
+        """解析 S6F11 消息为结构化事件。"""
+        return self._collection_event_parser.parse_s6f11(message)
+
+    async def report_collection_event(self, message) -> Optional[CollectionEventPayload]:
+        """解析并记录一条 S6F11 Collection Event。"""
+        payload = self.parse_collection_event(message)
+        if not payload:
+            return None
+
+        event_entry = {
+            "type": "collection_event",
+            "timestamp": datetime.now(),
+            "event": payload.to_dict(),
+        }
+        self._data_buffer.append(event_entry)
+        return payload
 
     async def report_event(self, event_id: int, data: Dict = None) -> None:
         """

@@ -39,7 +39,6 @@ class MessageDispatcher:
         self._driver_adapter = driver_adapter
         self._registry = MessageHandlerRegistry()
         self._running = False
-        self._task: Optional[asyncio.Task] = None
 
         # 回调
         self._on_message_handled: Optional[Callable] = None
@@ -111,14 +110,7 @@ class MessageDispatcher:
     async def stop(self) -> None:
         """停止分发器"""
         self._running = False
-
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        self._driver_adapter.set_callbacks()
 
         logger.info("MessageDispatcher stopped")
 
@@ -182,7 +174,7 @@ class MessageDispatcher:
             return
 
         # 回复消息已经由业务逻辑处理了，这里只需要发送回复
-        reply_items = result.reply_items if result.reply_items else []
+        reply_items = result.reply_items
 
         try:
             success = await self._driver_adapter.send_reply(message, reply_items)

@@ -12,7 +12,7 @@ from datetime import datetime
 from secs_driver.src.secs_message import SECSMessage, SECSItem
 from secs_driver.src.secs_types import SECSType
 
-from .base_handler import BaseMessageHandler, HandlerResult, HandlerPriority
+from .base_handler import BaseMessageHandler, HandlerResult, StreamHandlerManager
 
 
 logger = logging.getLogger(__name__)
@@ -180,43 +180,19 @@ class S5F5Handler(BaseMessageHandler):
         )
 
 
-class S5HandlerManager(BaseMessageHandler):
+class S5HandlerManager(StreamHandlerManager):
     """S5 系列消息管理器"""
 
     def __init__(self):
-        super().__init__("S5HandlerManager")
-        self._priority = HandlerPriority.HIGH
-
-        # 创建具体的处理器
         self._s5f1 = S5F1Handler()
         self._s5f3 = S5F3Handler()
         self._s5f5 = S5F5Handler()
-
-        # S-F 到处理器的映射
-        self._handler_map = {
-            (5, 1): self._s5f1,
-            (5, 3): self._s5f3,
-            (5, 5): self._s5f5,
-        }
-
-    def can_handle(self, message: SECSMessage) -> bool:
-        return message.stream == 5
-
-    async def handle(self, message: SECSMessage, context: Dict[str, Any]) -> HandlerResult:
-        """分发到对应的处理器"""
-        handler = self._handler_map.get((message.stream, message.function))
-
-        if handler is None:
-            logger.warning(f"No handler for S5F{message.function}")
-            return HandlerResult(
-                success=False,
-                message=f"No handler for S5F{message.function}",
-            )
-
-        return await handler.handle(message, context)
-
-    def register_handlers(self, registry) -> None:
-        """注册所有 S5 处理器"""
-        registry.register(self._s5f1, stream=5, function=1)
-        registry.register(self._s5f3, stream=5, function=3)
-        registry.register(self._s5f5, stream=5, function=5)
+        super().__init__(
+            "S5HandlerManager",
+            stream=5,
+            handler_map={
+                (5, 1): self._s5f1,
+                (5, 3): self._s5f3,
+                (5, 5): self._s5f5,
+            },
+        )

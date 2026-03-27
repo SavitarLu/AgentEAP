@@ -1,53 +1,51 @@
 # secs_eap
 
-基于 `secs_driver` 的 EAP（Equipment Automation Program）示例工程，包含：
+`secs_eap` 是基于 `secs_driver` 的 EAP 示例工程，按“驱动适配 -> 消息处理 -> 业务服务 -> 部署运行”分层组织，方便继续做设备定制。
 
-- 驱动适配层：`driver_adapter.py`
-- 消息处理层：`message_handlers/`
-- 业务服务层：`services/`
-- 主入口：`eap.py`
+## 目录说明
 
-## 1. 运行前准备
+```text
+secs_eap/
+├── config/              # 配置模型
+├── deploy/              # 启动脚本、部署配置、打包脚本
+├── docs/                # 开发与集成文档
+├── mes/                 # MES / MQ 集成
+├── message_handlers/    # SECS 消息处理
+├── services/            # 业务服务
+├── usecases/            # 具体消息用例模板
+├── driver_adapter.py    # 对 secs_driver 的适配层
+└── eap.py               # EAP 主入口
+```
 
-本项目依赖你本地的 `secs_driver` 源码目录：
+## 快速开始
 
-- `secs_eap`: `/Users/luxinyu/work/个人/secs_eap`
-- `secs_driver`: `/Users/luxinyu/work/个人/secs_driver`
-
-建议使用 Python 3.10+。
+建议在仓库根目录执行：
 
 ```bash
-cd "/Users/luxinyu/work/个人/secs_eap"
+cd /path/to/AgentEAP
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install pyyaml
+export PYTHONPATH="$(pwd):$PYTHONPATH"
 ```
 
-> 说明：`EAPConfig.from_file()` 在读取 YAML 配置时需要 `pyyaml`。
-
-## 2. 配置 Python 路径（让 secs_eap 能导入 secs_driver）
-
-当前工程通过 `from secs_driver.src...` 导入驱动模块，因此需要把 `secs_driver` 的父目录加入 `PYTHONPATH`：
-
-```bash
-export PYTHONPATH="/Users/luxinyu/work/个人:$PYTHONPATH"
-```
-
-可用下面命令快速验证：
+验证驱动导入：
 
 ```bash
 python3 -c "from secs_driver.src.secs_driver import SECSDriver; print('secs_driver import ok')"
 ```
 
-## 3. 启动方式
-
-### 方式 A：命令行启动 EAP
+命令行启动 EAP：
 
 ```bash
-cd "/Users/luxinyu/work/个人/secs_eap"
-export PYTHONPATH="/Users/luxinyu/work/个人:$PYTHONPATH"
 python3 -m secs_eap.eap --host 127.0.0.1 --port 5000 --mode active --device-id 0 --log-level INFO
+```
+
+按设备配置启动：
+
+```bash
+python3 secs_eap/deploy/bin/run_eap.py EQP001
 ```
 
 常用参数：
@@ -56,13 +54,20 @@ python3 -m secs_eap.eap --host 127.0.0.1 --port 5000 --mode active --device-id 0
 - `--host` / `--port`
 - `--device-id`
 - `--log-file`
-- `--config`（支持 JSON/YAML）
+- `--config`，支持 JSON / YAML
 
-## 4. 常见问题
+## 文档入口
+
+- [文档总览](docs/README.md)
+- [消息处理开发指南](docs/handler-development.md)
+- [S6F11 Collection Event 配置](docs/collection-events.md)
+- [MES APVRYOPE 接入说明](docs/mes-apvryope.md)
+
+## 常见问题
 
 - `ModuleNotFoundError: secs_driver`
-  - 先执行 `export PYTHONPATH="/Users/luxinyu/work/个人:$PYTHONPATH"`。
+  - 在仓库根目录执行 `export PYTHONPATH="$(pwd):$PYTHONPATH"`。
 - `No module named yaml`
   - 执行 `python3 -m pip install pyyaml`。
 - 已连接但长期未 `selected`
-  - 检查双方 `mode` 是否匹配，确认对端是否实现了 Select 握手。
+  - 检查双方 `mode` 是否匹配，并确认对端实现了 Select 握手。

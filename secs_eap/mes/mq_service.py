@@ -6,13 +6,106 @@ from dataclasses import dataclass, field
 import json
 import logging
 import re
-from typing import Dict, Optional, Tuple
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
-from .apvryope import APVRYOPERequest, APVRYOPEResponse
-from .tx_registry import get_tx_route
+from secs_driver.src.logging_utils import format_tagged_block
+
+from .tx.apvryope import APVRYOPERequest, APVRYOPEResponse
+from .tx_registry import get_tx_response_type, get_tx_route
 
 
 logger = logging.getLogger(__name__)
+
+
+def _load_mq_client():
+    """Lazy-load the official IBM MQ Python client."""
+    try:
+        import ibmmq as mq  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("ibmmq is required for IBM MQ integration") from exc
+    return mq
+
+
+def _apply_client_channel_type(mq, cd) -> None:
+    """
+    Set client channel type if the installed MQ binding exposes the constant.
+
+    In some ibmmq builds, `MQCHT_CLNTCONN` is not exported from `CMQC`
+    even though the rest of the client API is available.
+    """
+    constant = None
+    for module_name in ("CMQC", "CMQXC", "CMQCFC"):
+        module = getattr(mq, module_name, None)
+        if module is not None:
+            constant = getattr(module, "MQCHT_CLNTCONN", None)
+            if constant is not None:
+                break
+
+    if constant is None:
+        logger.debug(
+            "MQCHT_CLNTCONN not exported by ibmmq; skip explicit ChannelType assignment"
+        )
+        return
+
+    try:
+        cd.ChannelType = constant
+    except Exception as exc:
+        logger.debug("Failed to assign MQ client ChannelType: %s", exc)
+
+
+def _get_mq_constant(mq, name: str):
+    """Lookup an MQ constant across common constant modules."""
+    for module_name in ("CMQC", "CMQXC", "CMQCFC"):
+        module = getattr(mq, module_name, None)
+        if module is not None and hasattr(module, name):
+            return getattr(module, name)
+    return None
+
+
+def _set_if_present(obj, attr: str, value) -> None:
+    """Assign an MQ structure field only when the binding exposes it."""
+    if value is None or not hasattr(obj, attr):
+        return
+    try:
+        setattr(obj, attr, value)
+    except Exception as exc:
+        logger.debug("Failed to set MQ field %s: %s", attr, exc)
+
+
+def _format_mq_id(value) -> str:
+    """Render MQ binary identifiers as uppercase hex for logs."""
+    if value is None:
+        return ""
+    try:
+        raw = bytes(value)
+    except Exception:
+        return str(value)
+    return raw.hex().upper()
+
+
+def _format_json_for_log(payload) -> str:
+    """Pretty-print JSON payloads for readable logs."""
+    try:
+        return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False)
+    except Exception:
+        return str(payload)
+
+
+def _log_json_block(title: str, payload) -> None:
+    logger.info(
+        "%s",
+        format_tagged_block(f"{title}\n{_format_json_for_log(payload)}", "H"),
+        extra={"raw_log": True},
+    )
+
+
+def _is_no_msg_available(exc: Exception) -> bool:
+    """Best-effort detection of MQRC_NO_MSG_AVAILABLE across bindings."""
+    reason = getattr(exc, "reason", None)
+    if reason == 2033:
+        return True
+    return "2033" in str(exc) or "MQRC_NO_MSG_AVAILABLE" in str(exc)
 
 
 @dataclass
@@ -56,7 +149,7 @@ class MesMqConfig:
 
 class MesMqService:
     """
-    Minimal synchronous MQ client for APVRYOPE.
+    Minimal synchronous MQ client for Python-based MES TX codecs.
     """
 
     def __init__(self, config: MesMqConfig):
@@ -68,10 +161,7 @@ class MesMqService:
         return bool(self._qmgr_by_alias)
 
     def connect(self) -> None:
-        try:
-            import pymqi  # type: ignore
-        except Exception as exc:
-            raise RuntimeError("pymqi is required for IBM MQ integration") from exc
+        _load_mq_client()
 
         # Pre-connect all cluster aliases if defined, else fallback to legacy single endpoint.
         if self._config.mq_conn_list:
@@ -103,72 +193,122 @@ class MesMqService:
             logger.info("MES MQ disconnected alias=%s", alias)
         self._qmgr_by_alias.clear()
 
-    def query_lot_apvryope(self, request: APVRYOPERequest) -> APVRYOPEResponse:
+    def execute_tx(self, tx_name: str, request: Any) -> Any:
         # Avoid using cached qmgr across threads; create a fresh connection per call.
         if not self._config.mq_conn_list:
             raise RuntimeError("MES MQ not connected/configured (mq_conn_list empty)")
 
-        import pymqi  # type: ignore
+        mq = _load_mq_client()
 
-        tx_name = "APVRYOPE"
+        tx_name = str(tx_name or getattr(request, "trx_id", "") or "").strip().upper()
+        if not tx_name:
+            raise RuntimeError("TX name is required")
+        if not hasattr(request, "to_payload"):
+            raise RuntimeError(f"{tx_name} request object must provide to_payload()")
         tx_route = get_tx_route(tx_name)
         conn_alias = self._resolve_sender_alias()
         request_queue = tx_route.request_queue
-        listener_endpoint = self._resolve_listener(conn_alias)
-        _, reply_queue, _ = self._parse_endpoint(listener_endpoint)
+        listener_endpoints = self._resolve_listeners(conn_alias)
+        primary_listener = listener_endpoints[0]
+        _, reply_queue, reply_app_id = self._parse_endpoint(primary_listener)
+        qmgr_name, _, _ = self._parse_conn_spec(self._config.mq_conn_list[conn_alias])
+        reply_to_qmgr = qmgr_name if len(listener_endpoints) == 1 else None
         qmgr = None
         req_q = None
-        rep_q = None
+        reply_handles = []
+        request_md = None
+        last_reply_md = None
         try:
             qmgr = self._connect_qmgr_fresh(conn_alias)
-            req_q = pymqi.Queue(qmgr, request_queue)
-            rep_q = pymqi.Queue(qmgr, reply_queue)
+            req_q = mq.Queue(qmgr, request_queue)
 
             payload = request.to_payload()
             msg = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            md = pymqi.MD()
-            pmo = pymqi.PMO()
-            gmo = pymqi.GMO()
-            gmo.Options = pymqi.CMQC.MQGMO_WAIT | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING
-            gmo.WaitInterval = self._config.timeout_ms
+            _log_json_block("MQ TX payload(JSON):", payload)
+            request_md = mq.MD()
+            pmo = mq.PMO()
+            _set_if_present(
+                pmo,
+                "Options",
+                (_get_mq_constant(mq, "MQPMO_NEW_MSG_ID") or 0)
+                | (_get_mq_constant(mq, "MQPMO_FAIL_IF_QUIESCING") or 0),
+            )
+            _set_if_present(request_md, "ReplyToQ", reply_queue)
+            _set_if_present(request_md, "ReplyToQMgr", reply_to_qmgr)
+            _set_if_present(request_md, "ApplIdentityData", reply_app_id[:32] if reply_app_id else None)
+            user_id = getattr(request, "user_id", "") or ""
+            _set_if_present(request_md, "UserIdentifier", user_id[:12] if user_id else None)
+            _set_if_present(request_md, "CodedCharSetId", self._config.ccsid)
+            _set_if_present(request_md, "Format", _get_mq_constant(mq, "MQFMT_STRING"))
+            _set_if_present(request_md, "MsgType", _get_mq_constant(mq, "MQMT_REQUEST"))
 
-            req_q.put(msg, md, pmo)
+            req_q.put(msg, request_md, pmo)
+            request_msg_id = getattr(request_md, "MsgId", None)
+            request_correl_id = getattr(request_md, "CorrelId", None)
             logger.info(
-                "MQ TX sent(JSON): %s qm_alias=%s req_queue=%s reply_queue=%s eqpt_id=%s crr_id=%s",
+                "MQ TX sent(JSON): %s qm_alias=%s req_queue=%s reply_queue=%s reply_qmgr=%s "
+                "eqpt_id=%s crr_id=%s msg_id=%s correl_id=%s app_id=%s listeners=%s",
                 tx_name,
                 conn_alias,
                 request_queue,
                 reply_queue,
-                request.eqpt_id,
-                request.crr_id,
+                reply_to_qmgr or "",
+                getattr(request, "eqpt_id", ""),
+                getattr(request, "crr_id", ""),
+                _format_mq_id(request_msg_id),
+                _format_mq_id(request_correl_id),
+                reply_app_id,
+                ",".join(
+                    f"{alias}:{queue}"
+                    for alias, queue, _app in (self._parse_endpoint(ep) for ep in listener_endpoints)
+                ),
             )
 
-            reply_bytes = rep_q.get(None, md, gmo)
+            reply_handles = self._open_reply_handles(mq, listener_endpoints)
+            deadline = time.monotonic() + (self._config.timeout_ms / 1000.0)
+            reply_bytes, last_reply_md, reply_alias, reply_queue = self._wait_for_reply(
+                mq=mq,
+                tx_name=tx_name,
+                reply_handles=reply_handles,
+                request_msg_id=request_msg_id,
+                deadline=deadline,
+            )
             raw_payload = reply_bytes.decode("utf-8", errors="ignore")
             try:
                 reply_obj = json.loads(raw_payload)
             except Exception as exc:
-                raise RuntimeError(f"APVRYOPE reply is not valid JSON: {exc}") from exc
+                raise RuntimeError(f"{tx_name} reply is not valid JSON: {exc}") from exc
 
             if not isinstance(reply_obj, dict):
-                raise RuntimeError("APVRYOPE reply JSON root must be object")
+                raise RuntimeError(f"{tx_name} reply JSON root must be object")
 
-            response = APVRYOPEResponse.from_payload(reply_obj, raw_payload=raw_payload)
+            response = self._decode_tx_response(tx_name, reply_obj, raw_payload)
+            _log_json_block("MQ TX reply(JSON):", reply_obj)
             logger.info(
-                "MQ TX reply: APVRYOPE rtn_code=%s lot_id=%s",
-                response.rtn_code,
-                response.lot_id,
+                "MQ TX reply: %s qm_alias=%s reply_queue=%s rtn_code=%s lot_id=%s msg_id=%s correl_id=%s",
+                tx_name,
+                reply_alias,
+                reply_queue,
+                getattr(response, "rtn_code", ""),
+                getattr(response, "lot_id", ""),
+                _format_mq_id(getattr(last_reply_md, "MsgId", None)),
+                _format_mq_id(getattr(last_reply_md, "CorrelId", None)),
             )
             return response
         except Exception as exc:
             logger.error(
-                "MQ TX failed: %s conn_alias=%s req_queue=%s reply_queue=%s eqpt_id=%s crr_id=%s error=%s",
+                "MQ TX failed: %s conn_alias=%s req_queue=%s reply_queue=%s reply_qmgr=%s "
+                "eqpt_id=%s crr_id=%s request_msg_id=%s wait_msg_id=%s app_id=%s error=%s",
                 tx_name,
                 conn_alias,
                 request_queue,
                 reply_queue,
-                request.eqpt_id,
-                request.crr_id,
+                reply_to_qmgr or "",
+                getattr(request, "eqpt_id", ""),
+                getattr(request, "crr_id", ""),
+                _format_mq_id(getattr(request_md, "MsgId", None) if request_md else None),
+                _format_mq_id(request_msg_id if 'request_msg_id' in locals() else None),
+                reply_app_id,
                 exc,
             )
             raise
@@ -179,8 +319,15 @@ class MesMqService:
             except Exception:
                 pass
             try:
-                if rep_q:
-                    rep_q.close()
+                for reply_qmgr, rep_q, _reply_alias, _reply_queue in reply_handles:
+                    try:
+                        rep_q.close()
+                    except Exception:
+                        pass
+                    try:
+                        reply_qmgr.disconnect()
+                    except Exception:
+                        pass
             except Exception:
                 pass
             try:
@@ -188,6 +335,16 @@ class MesMqService:
                     qmgr.disconnect()
             except Exception:
                 pass
+
+    def query_lot_apvryope(self, request: APVRYOPERequest) -> APVRYOPEResponse:
+        return self.execute_tx("APVRYOPE", request)
+
+    @staticmethod
+    def _decode_tx_response(tx_name: str, payload: Dict[str, Any], raw_payload: str) -> Any:
+        response_type = get_tx_response_type(tx_name)
+        if response_type and hasattr(response_type, "from_payload"):
+            return response_type.from_payload(payload, raw_payload=raw_payload)
+        return payload
 
     def _resolve_sender_alias(self) -> str:
         if self._config.mq_sender:
@@ -210,25 +367,44 @@ class MesMqService:
             return next(iter(self._config.mq_listener.values()))
         raise RuntimeError(f"No MQ listener configured for alias={conn_alias}")
 
+    def _resolve_listeners(self, conn_alias: str) -> List[str]:
+        """Return reply listener endpoints, prioritizing the sender alias."""
+        matched = []
+        others = []
+        for endpoint in self._config.mq_listener.values():
+            ep_alias, _queue, _eqpt = self._parse_endpoint(endpoint)
+            if ep_alias == conn_alias:
+                matched.append(endpoint)
+            else:
+                others.append(endpoint)
+
+        listeners = matched + others
+        if listeners:
+            return listeners
+        raise RuntimeError(f"No MQ listener configured for alias={conn_alias}")
+
     def _get_or_connect_qmgr(self, alias: str):
         if alias in self._qmgr_by_alias:
             return self._qmgr_by_alias[alias]
+        return self._connect_qmgr(alias, cache_result=True)
+
+    def _connect_qmgr(self, alias: str, cache_result: bool):
+        """Connect one queue manager, optionally caching the handle by alias."""
+        mq = _load_mq_client()
 
         spec = self._config.mq_conn_list.get(alias, "")
         if not spec:
             raise RuntimeError(f"MQ connection alias not found: {alias}")
 
         qmgr_name, channel, conn_name = self._parse_conn_spec(spec)
-        import pymqi  # type: ignore
-
-        cd = pymqi.CD()
+        cd = mq.CD()
         cd.ChannelName = channel
         cd.ConnectionName = conn_name
-        cd.ChannelType = pymqi.CMQC.MQCHT_CLNTCONN
-        sco = pymqi.SCO()
+        _apply_client_channel_type(mq, cd)
+        sco = mq.SCO()
 
         if self._config.user:
-            qmgr = pymqi.QueueManager(None)
+            qmgr = mq.QueueManager(None)
             try:
                 qmgr.connect_with_options(
                     qmgr_name,
@@ -249,7 +425,7 @@ class MesMqService:
                 raise
         else:
             try:
-                qmgr = pymqi.connect(qmgr_name, channel, conn_name)
+                qmgr = mq.connect(qmgr_name, channel, conn_name)
             except Exception as exc:
                 logger.error(
                     "MES MQ connect failed (alias=%s) qmgr_name=%s channel=%s conn_name=%s user_provided=no error=%s",
@@ -261,8 +437,14 @@ class MesMqService:
                 )
                 raise
 
-        self._qmgr_by_alias[alias] = qmgr
-        logger.info("MES MQ connected alias=%s qmgr=%s", alias, qmgr_name)
+        if cache_result:
+            self._qmgr_by_alias[alias] = qmgr
+        logger.info(
+            "MES MQ connected alias=%s qmgr=%s cached=%s",
+            alias,
+            qmgr_name,
+            cache_result,
+        )
         return qmgr
 
     def _connect_qmgr_fresh(self, alias: str):
@@ -270,32 +452,83 @@ class MesMqService:
         Create a new QueueManager instance for a single operation.
         This avoids reusing cached qmgr objects across asyncio worker threads.
         """
-        spec = self._config.mq_conn_list.get(alias, "")
-        if not spec:
-            raise RuntimeError(f"MQ connection alias not found: {alias}")
+        return self._connect_qmgr(alias, cache_result=False)
 
-        qmgr_name, channel, conn_name = self._parse_conn_spec(spec)
-        import pymqi  # type: ignore
+    def _open_reply_handles(self, mq, listener_endpoints: List[str]):
+        """Open reply queues for all configured listeners."""
+        handles = []
+        for endpoint in listener_endpoints:
+            reply_alias, reply_queue, _reply_app_id = self._parse_endpoint(endpoint)
+            reply_qmgr = self._connect_qmgr_fresh(reply_alias)
+            rep_q = mq.Queue(reply_qmgr, reply_queue)
+            handles.append((reply_qmgr, rep_q, reply_alias, reply_queue))
+        return handles
 
-        cd = pymqi.CD()
-        cd.ChannelName = channel
-        cd.ConnectionName = conn_name
-        cd.ChannelType = pymqi.CMQC.MQCHT_CLNTCONN
-        sco = pymqi.SCO()
+    def _wait_for_reply(
+        self,
+        mq,
+        tx_name: str,
+        reply_handles,
+        request_msg_id,
+        deadline: float,
+    ):
+        """Poll all listener queues until one returns the expected reply."""
+        match_msg_id = _format_mq_id(request_msg_id)
+        match_correl_opt = _get_mq_constant(mq, "MQMO_MATCH_CORREL_ID")
+        match_msg_opt = _get_mq_constant(mq, "MQMO_MATCH_MSG_ID")
+        match_specs = []
+        if match_msg_opt is not None:
+            match_specs.append(("msg_id", "MsgId", match_msg_opt))
+        if match_correl_opt is not None:
+            match_specs.append(("correl_id", "CorrelId", match_correl_opt))
+        if not match_specs:
+            raise RuntimeError("IBM MQ binding does not expose reply match options")
 
-        if self._config.user:
-            qmgr = pymqi.QueueManager(None)
-            qmgr.connect_with_options(
-                qmgr_name,
-                user=self._config.user,
-                password=self._config.password,
-                cd=cd,
-                sco=sco,
-            )
-        else:
-            qmgr = pymqi.connect(qmgr_name, channel, conn_name)
+        while True:
+            remaining_ms = int(max(0.0, deadline - time.monotonic()) * 1000)
+            if remaining_ms <= 0:
+                raise TimeoutError(
+                    f"Timed out waiting MQ reply for msg_id={match_msg_id}"
+                )
 
-        return qmgr
+            wait_slice_ms = min(remaining_ms, 1000)
+            last_no_msg_exc = None
+            for _reply_qmgr, rep_q, reply_alias, reply_queue in reply_handles:
+                for match_name, match_attr, match_option in match_specs:
+                    reply_md = mq.MD()
+                    if match_attr == "MsgId":
+                        _set_if_present(reply_md, "MsgId", request_msg_id)
+                    elif match_attr == "CorrelId":
+                        _set_if_present(reply_md, "MsgId", _get_mq_constant(mq, "MQMI_NONE"))
+                        _set_if_present(reply_md, "CorrelId", request_msg_id)
+
+                    gmo = mq.GMO()
+                    gmo.Options = mq.CMQC.MQGMO_WAIT | mq.CMQC.MQGMO_FAIL_IF_QUIESCING
+                    gmo.WaitInterval = wait_slice_ms
+                    if hasattr(gmo, "MatchOptions"):
+                        _set_if_present(gmo, "MatchOptions", match_option)
+
+                    logger.info(
+                        "MQ TX waiting reply: %s qm_alias=%s reply_queue=%s wait_ms=%s "
+                        "match_type=%s match_value=%s",
+                        tx_name,
+                        reply_alias,
+                        reply_queue,
+                        wait_slice_ms,
+                        match_name,
+                        _format_mq_id(getattr(reply_md, match_attr, None)),
+                    )
+                    try:
+                        reply_bytes = rep_q.get(None, reply_md, gmo)
+                        return reply_bytes, reply_md, reply_alias, reply_queue
+                    except Exception as exc:
+                        if _is_no_msg_available(exc):
+                            last_no_msg_exc = exc
+                            continue
+                        raise
+
+            if last_no_msg_exc is not None and time.monotonic() >= deadline:
+                raise last_no_msg_exc
 
     @staticmethod
     def _parse_conn_spec(spec: str) -> Tuple[str, str, str]:
@@ -315,4 +548,3 @@ class MesMqService:
         if len(parts) != 3:
             raise RuntimeError(f"Invalid endpoint spec: {endpoint}")
         return parts[0].strip(), parts[1].strip(), parts[2].strip()
-

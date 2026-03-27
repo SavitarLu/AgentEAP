@@ -4,7 +4,6 @@ S2 系列消息处理器
 S2: Equipment Control
 """
 
-import asyncio
 import logging
 from typing import Dict, Any
 from datetime import datetime
@@ -12,7 +11,7 @@ from datetime import datetime
 from secs_driver.src.secs_message import SECSMessage, SECSItem
 from secs_driver.src.secs_types import SECSType
 
-from .base_handler import BaseMessageHandler, HandlerResult, HandlerPriority
+from .base_handler import BaseMessageHandler, HandlerResult, StreamHandlerManager
 from ..usecases.s2f41_remote_command import S2F41RemoteCommandUseCase
 
 
@@ -236,52 +235,25 @@ class S2F41Handler(BaseMessageHandler):
         )
 
 
-class S2HandlerManager(BaseMessageHandler):
+class S2HandlerManager(StreamHandlerManager):
     """S2 系列消息管理器"""
 
     def __init__(self):
-        super().__init__("S2HandlerManager")
-        self._priority = HandlerPriority.HIGH
-
-        # 创建具体的处理器
         self._s2f1 = S2F1Handler()
         self._s2f13 = S2F13Handler()
         self._s2f17 = S2F17Handler()
         self._s2f29 = S2F29Handler()
         self._s2f31 = S2F31Handler()
         self._s2f41 = S2F41Handler()
-
-        # S-F 到处理器的映射
-        self._handler_map = {
-            (2, 1): self._s2f1,
-            (2, 13): self._s2f13,
-            (2, 17): self._s2f17,
-            (2, 29): self._s2f29,
-            (2, 31): self._s2f31,
-            (2, 41): self._s2f41,
-        }
-
-    def can_handle(self, message: SECSMessage) -> bool:
-        return message.stream == 2
-
-    async def handle(self, message: SECSMessage, context: Dict[str, Any]) -> HandlerResult:
-        """分发到对应的处理器"""
-        handler = self._handler_map.get((message.stream, message.function))
-
-        if handler is None:
-            logger.warning(f"No handler for S2F{message.function}")
-            return HandlerResult(
-                success=False,
-                message=f"No handler for S2F{message.function}",
-            )
-
-        return await handler.handle(message, context)
-
-    def register_handlers(self, registry) -> None:
-        """注册所有 S2 处理器"""
-        registry.register(self._s2f1, stream=2, function=1)
-        registry.register(self._s2f13, stream=2, function=13)
-        registry.register(self._s2f17, stream=2, function=17)
-        registry.register(self._s2f29, stream=2, function=29)
-        registry.register(self._s2f31, stream=2, function=31)
-        registry.register(self._s2f41, stream=2, function=41)
+        super().__init__(
+            "S2HandlerManager",
+            stream=2,
+            handler_map={
+                (2, 1): self._s2f1,
+                (2, 13): self._s2f13,
+                (2, 17): self._s2f17,
+                (2, 29): self._s2f29,
+                (2, 31): self._s2f31,
+                (2, 41): self._s2f41,
+            },
+        )

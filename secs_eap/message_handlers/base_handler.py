@@ -6,8 +6,8 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Callable, Any
-from dataclasses import dataclass
+from typing import Optional, List, Dict, Any, Tuple
+from dataclasses import dataclass, field
 from enum import Enum
 
 from secs_driver.src.secs_message import SECSMessage, SECSItem
@@ -30,7 +30,7 @@ class HandlerResult:
 
     success: bool
     message: Optional[str] = None
-    reply_items: List[SECSItem] = None
+    reply_items: List[SECSItem] = field(default_factory=list)
     data: Any = None
 
 
@@ -141,6 +141,45 @@ class BaseMessageHandler(ABC):
         return f"{self._name}(priority={self._priority.name}, enabled={self._enabled})"
 
 
+class StreamHandlerManager(BaseMessageHandler):
+    """按 Stream 聚合子处理器的管理器基类。"""
+
+    def __init__(
+        self,
+        name: str,
+        stream: int,
+        handler_map: Optional[Dict[Tuple[int, int], BaseMessageHandler]] = None,
+    ):
+        super().__init__(name)
+        self._priority = HandlerPriority.HIGH
+        self._stream = stream
+        self._handler_map: Dict[Tuple[int, int], BaseMessageHandler] = handler_map or {}
+
+    def can_handle(self, message: SECSMessage) -> bool:
+        return message.stream == self._stream
+
+    async def handle(
+        self,
+        message: SECSMessage,
+        context: Dict[str, Any],
+    ) -> HandlerResult:
+        """分发到对应的 Function 处理器。"""
+        handler = self._handler_map.get((message.stream, message.function))
+        if handler is None:
+            logger.warning(f"No handler for S{self._stream}F{message.function}")
+            return HandlerResult(
+                success=False,
+                message=f"No handler for S{self._stream}F{message.function}",
+            )
+
+        return await handler.on_message(message, context)
+
+    def register_handlers(self, registry: "MessageHandlerRegistry") -> None:
+        """将内部子处理器逐个注册到注册表。"""
+        for (stream, function), handler in sorted(self._handler_map.items()):
+            registry.register(handler, stream=stream, function=function)
+
+
 class MessageHandlerRegistry:
     """
     消息处理器注册表
@@ -170,15 +209,11 @@ class MessageHandlerRegistry:
         if stream is not None and function is not None:
             # 注册到特定的 S-F
             key = f"S{stream}F{function}"
-            if key not in self._handlers:
-                self._handlers[key] = []
-            self._handlers[key].append(handler)
+            self._handlers.setdefault(key, []).append(handler)
             logger.debug(f"Registered handler {handler.name} for {key}")
         elif stream is not None:
             # 注册到整个 Stream
-            if stream not in self._stream_handlers:
-                self._stream_handlers[stream] = []
-            self._stream_handlers[stream].append(handler)
+            self._stream_handlers.setdefault(stream, []).append(handler)
             logger.debug(f"Registered handler {handler.name} for S{stream}*")
         else:
             # 注册为默认处理器
@@ -210,15 +245,11 @@ class MessageHandlerRegistry:
 
     def _sort_handlers(self) -> None:
         """对所有处理器按优先级排序"""
-        all_handler_lists = [
-            self._handlers,
-            {k: v for k, v in self._stream_handlers.items()},
-            {"_default": self._default_handlers},
-        ]
-
-        for handler_dict in all_handler_lists:
-            for key in handler_dict:
-                handler_dict[key].sort(key=lambda h: h.priority.value)
+        for handler_list in self._handlers.values():
+            handler_list.sort(key=lambda h: h.priority.value)
+        for handler_list in self._stream_handlers.values():
+            handler_list.sort(key=lambda h: h.priority.value)
+        self._default_handlers.sort(key=lambda h: h.priority.value)
 
     def find_handlers(self, message: SECSMessage) -> List[BaseMessageHandler]:
         """

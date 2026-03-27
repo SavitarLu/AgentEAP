@@ -12,6 +12,8 @@ import logging
 import signal
 from typing import Optional, Dict, Any
 
+from secs_driver.src.logging_utils import RuntimeLogFormatter
+
 from .config import EAPConfig, EquipmentConfig
 from .driver_adapter import DriverAdapter, ConnectionState
 from .message_handlers import MessageDispatcher, MessageHandlerRegistry
@@ -26,7 +28,16 @@ from .services import (
     ProcessService,
     WorkflowEngine,
 )
-from .mes import MesMqConfig, MesMqService, APVRYOPERequest, APVRYOPEResponse
+from .mes import (
+    MesMqConfig,
+    MesMqService,
+    APVRYOPERequest,
+    APVRYOPEResponse,
+    TxRoute,
+    get_tx_route,
+    list_tx_routes,
+    reload_tx_routes,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -84,7 +95,7 @@ class EAP:
         level = getattr(logging, log_config.log_level.upper(), logging.INFO)
 
         # 创建日志格式
-        formatter = logging.Formatter(
+        formatter = RuntimeLogFormatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         )
 
@@ -126,7 +137,8 @@ class EAP:
             self._config.business_logic.alarm_history_size
         )
         self._data_service = DataCollectionService(
-            self._config.business_logic.trace_data_buffer_size
+            self._config.business_logic.trace_data_buffer_size,
+            collection_event_config=self._config.business_logic.collection_events,
         )
         self._process_service = ProcessService(
             self._config.business_logic.process_timeout
@@ -157,12 +169,16 @@ class EAP:
         self._register_handlers()
 
         # 设置分发器上下文
-        self._dispatcher.set_context("equipment_service", self._equipment_service)
-        self._dispatcher.set_context("alarm_service", self._alarm_service)
-        self._dispatcher.set_context("data_collection_service", self._data_service)
-        self._dispatcher.set_context("process_service", self._process_service)
-        self._dispatcher.set_context("workflow_engine", self._workflow_engine)
-        self._dispatcher.set_context("eap_api", self)
+        for key, value in {
+            "equipment_service": self._equipment_service,
+            "alarm_service": self._alarm_service,
+            "data_collection_service": self._data_service,
+            "collection_event_config": self._config.business_logic.collection_events,
+            "process_service": self._process_service,
+            "workflow_engine": self._workflow_engine,
+            "eap_api": self,
+        }.items():
+            self._dispatcher.set_context(key, value)
 
         # 设置分发器回调
         self._dispatcher.set_callbacks(
@@ -182,11 +198,13 @@ class EAP:
 
     def _register_handlers(self) -> None:
         """注册消息处理器"""
-        # 按优先级注册
-        self._registry.register(self._s1_manager, stream=1)
-        self._registry.register(self._s2_manager, stream=2)
-        self._registry.register(self._s5_manager, stream=5)
-        self._registry.register(self._s6_manager, stream=6)
+        for stream, manager in (
+            (1, self._s1_manager),
+            (2, self._s2_manager),
+            (5, self._s5_manager),
+            (6, self._s6_manager),
+        ):
+            self._registry.register(manager, stream=stream)
 
         logger.info(
             f"Registered {self._registry.get_handler_count()} message handlers"
@@ -403,7 +421,17 @@ class EAP:
             user_id=user_id,
         )
         # MQ client is synchronous; offload to a thread to avoid blocking asyncio loop.
-        return await asyncio.to_thread(self._mes_mq_service.query_lot_apvryope, req)
+        return await self.execute_mes_tx("APVRYOPE", req)
+
+    async def execute_mes_tx(self, tx_name: str, request: Any) -> Any:
+        """Execute one registered MES TX with a Python request codec object."""
+        if not self._mes_mq_service:
+            raise RuntimeError("MES MQ is not enabled")
+
+        if not self._mes_mq_service.is_connected:
+            self._mes_mq_service.connect()
+
+        return await asyncio.to_thread(self._mes_mq_service.execute_tx, tx_name, request)
 
     def is_mes_mq_ready(self) -> bool:
         # Workflow steps may use a fresh connection per TX, so "configured/enabled"
@@ -418,6 +446,18 @@ class EAP:
         if self._mes_mq_connect_error:
             return self._mes_mq_connect_error
         return "MQ client not connected"
+
+    def get_registered_tx_routes(self) -> Dict[str, TxRoute]:
+        """Return all TX routes discovered from secs_eap/mes/tx."""
+        return {route.tx_name: route for route in list_tx_routes()}
+
+    def get_registered_tx_route(self, tx_name: str) -> TxRoute:
+        """Return one TX route discovered from secs_eap/mes/tx."""
+        return get_tx_route(tx_name)
+
+    def reload_registered_tx_routes(self) -> Dict[str, TxRoute]:
+        """Reload TX routes after tx/ source files change."""
+        return dict(reload_tx_routes())
 
     # ==================== 属性 ====================
 

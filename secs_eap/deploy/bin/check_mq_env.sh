@@ -45,12 +45,12 @@ else
     error "python3 not found in PATH"
 fi
 
-# 2. pymqi
-echo "2) pymqi (Python MQ client library)"
-if python3 -c "import pymqi; print(f'pymqi {pymqi.__version__}')" 2>/dev/null; then
-    pass "pymqi imported OK"
+# 2. ibmmq
+echo "2) ibmmq (official Python MQ client library)"
+if python3 -c "import ibmmq; print(f'ibmmq {getattr(ibmmq, \"__version__\", \"unknown\")}')" 2>/dev/null; then
+    pass "ibmmq imported OK"
 else
-    error "pymqi not installed — run: pip install pymqi"
+    error "ibmmq not installed — run: pip install ibmmq"
 fi
 
 # 3. IBM MQ Client (libmqic / MQ_HOME)
@@ -83,10 +83,10 @@ for dir in "${MQ_HOME}/lib64" "${MQ_HOME}/lib" "/opt/mqm/lib64" "/opt/mqm/lib"; 
     fi
 done
 if ! $found_lib; then
-    skip "libmqic not found — pymqi may still work if LD_LIBRARY_PATH / DYLD_LIBRARY_PATH is set"
+    skip "libmqic not found — ibmmq may still work if LD_LIBRARY_PATH / DYLD_LIBRARY_PATH is set"
 fi
 
-# 5. MQ header files (required to build pymqi)
+# 5. MQ header files (may be required when building ibmmq from source)
 echo "5) MQ header files (cmqc.h)"
 found_header=false
 for dir in "${MQ_HOME}/inc" "/opt/mqm/inc"; do
@@ -119,11 +119,11 @@ else
 fi
 
 # 7. Quick connectivity smoke test (optional)
-echo "7) pymqi CMQC constants"
-if python3 -c "from pymqi import CMQC; print(f'MQGMO_WAIT={CMQC.MQGMO_WAIT}')" 2>/dev/null; then
+echo "7) ibmmq CMQC constants"
+if python3 -c "from ibmmq import CMQC; print(f'MQGMO_WAIT={CMQC.MQGMO_WAIT}')" 2>/dev/null; then
     pass "CMQC constants accessible"
 else
-    skip "Could not load pymqi.CMQC (pymqi not installed or MQ client missing)"
+    skip "Could not load ibmmq.CMQC (ibmmq not installed or MQ client missing)"
 fi
 
 echo ""

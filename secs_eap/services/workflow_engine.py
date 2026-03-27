@@ -8,10 +8,17 @@ Purpose:
 
 import logging
 import asyncio
+from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from secs_driver.src.secs_message import SECSItem, SECSMessage
+from secs_driver.src.secs_types import SECSType
+
+from ..mes.tx.base import build_tx_dataclass
+from ..mes.tx_registry import get_tx_request_type
+from .event_report_setup import EventReportSetupBuilder
+from .reply_meanings import format_reply_ack
 
 
 logger = logging.getLogger(__name__)
@@ -69,9 +76,12 @@ class WorkflowEngine:
         if not self._workflows:
             return
 
+        variables = self._extract_variables(message, context)
         for workflow in self._workflows:
             trigger = workflow.get("trigger", {})
             if trigger.get("sf") != message.sf:
+                continue
+            if not self._trigger_matches(trigger, variables):
                 continue
 
             logger.info("Workflow matched: %s (trigger=%s)", workflow.get("name", "unnamed"), message.sf)
@@ -88,7 +98,7 @@ class WorkflowEngine:
             logger.warning("Workflow skipped: eap_api not available in context")
             return
 
-        variables = self._extract_variables(message)
+        variables = self._extract_variables(message, context)
         state: Dict[str, Any] = {
             "last_reply": None,
             "last_error": None,
@@ -103,8 +113,14 @@ class WorkflowEngine:
                     break
                 continue
 
-            if action == "mes_apvryope":
-                ok = await self._step_mes_apvryope(idx, step, eap_api, variables, state)
+            if isinstance(action, str) and action.startswith("mes_"):
+                ok = await self._step_mes_tx(idx, step, eap_api, variables, state)
+                if not ok:
+                    break
+                continue
+
+            if action == "configure_collection_events":
+                ok = await self._step_configure_collection_events(idx, step, eap_api, context, state)
                 if not ok:
                     break
                 continue
@@ -119,7 +135,7 @@ class WorkflowEngine:
 
             logger.warning("Unsupported workflow action at step %d: %s", idx, action)
 
-    async def _step_mes_apvryope(
+    async def _step_mes_tx(
         self,
         idx: int,
         step: Dict[str, Any],
@@ -127,30 +143,27 @@ class WorkflowEngine:
         variables: Dict[str, Any],
         state: Dict[str, Any],
     ) -> bool:
-        tx = step.get("transaction", {}) or {}
-
-        def sub(v: Any) -> Any:
-            if not isinstance(v, str):
-                return v
-            out = v
-            for key, raw in variables.items():
-                out = out.replace(f"${{{key}}}", "" if raw is None else str(raw))
-            return out
-
-        trx_id = sub(tx.get("trx_id", "APVRYOPE")) or "APVRYOPE"
-        eqpt_id = sub(tx.get("eqpt_id", "")) or ""
-        port_id = sub(tx.get("port_id", "")) or ""
-        crr_id = sub(tx.get("crr_id", "")) or ""
-        user_id = sub(tx.get("user_id", "")) or ""
+        action = str(step.get("action") or "")
+        tx = self._substitute_workflow_value(step.get("transaction", {}) or {}, variables)
+        tx_name = self._resolve_mes_tx_name(action, tx)
+        if not tx_name:
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} MES TX failed: missing trx_id for action={action}"
+            )
+            logger.warning("%s", state["last_error"])
+            return False
+        tx.setdefault("trx_id", tx_name)
+        request_type = get_tx_request_type(tx_name)
+        if request_type is None:
+            state["last_error"] = RuntimeError(f"Workflow step {idx} MES TX failed: unknown tx={tx_name}")
+            logger.warning("%s", state["last_error"])
+            return False
 
         logger.info(
-            "Workflow step %d: MES MQ TX %s (eqpt_id=%s port_id=%s crr_id=%s user_id=%s)",
+            "Workflow step %d: MES MQ TX %s (%s)",
             idx,
-            trx_id,
-            eqpt_id,
-            port_id,
-            crr_id,
-            user_id,
+            tx_name,
+            self._format_mes_tx_fields(tx),
         )
 
         if hasattr(eap_api, "is_mes_mq_ready") and not eap_api.is_mes_mq_ready():
@@ -162,20 +175,15 @@ class WorkflowEngine:
                     reason = None
             logger.warning(
                 "Workflow step %d skipped: MES MQ not connected. "
-                "Reason=%s. Please install pymqi and IBM MQ client, then restart EAP.",
+                "Reason=%s. Please install ibmmq and IBM MQ client, then restart EAP.",
                 idx,
                 reason,
             )
             return True
 
         try:
-            resp = await eap_api.query_lot_by_apvryope(
-                eqpt_id=eqpt_id,
-                port_id=port_id,
-                crr_id=crr_id,
-                user_id=user_id,
-                trx_id=trx_id,
-            )
+            request = self._build_mes_tx_request(tx_name, request_type, tx)
+            resp = await eap_api.execute_mes_tx(tx_name, request)
             state["last_mq_response"] = resp
             state["last_error"] = None
             raw = getattr(resp, "raw_payload", "") or ""
@@ -188,6 +196,146 @@ class WorkflowEngine:
             state["last_error"] = exc
             logger.warning("Workflow step %d MES MQ failed: %s", idx, exc)
             return False
+
+    def _build_mes_tx_request(self, tx_name: str, request_type: Any, tx: Dict[str, Any]) -> Any:
+        try:
+            if is_dataclass(request_type):
+                self._validate_mes_tx_fields(tx_name, request_type, tx)
+                return build_tx_dataclass(request_type, tx)
+            return request_type(**tx)
+        except TypeError as exc:
+            allowed = self._describe_request_fields(request_type)
+            if allowed:
+                raise RuntimeError(
+                    f"Invalid fields for MES TX {tx_name}: {exc}. Allowed fields: {allowed}"
+                ) from exc
+            raise RuntimeError(f"Invalid fields for MES TX {tx_name}: {exc}") from exc
+
+    def _validate_mes_tx_fields(self, tx_name: str, request_type: Any, tx: Dict[str, Any]) -> None:
+        allowed_fields = {field.name.lower(): field.name for field in fields(request_type)}
+        unknown_fields = [
+            key for key in tx.keys()
+            if str(key).lower() not in allowed_fields
+        ]
+        if unknown_fields:
+            allowed = ", ".join(allowed_fields[name] for name in sorted(allowed_fields))
+            unknown = ", ".join(str(key) for key in unknown_fields)
+            raise RuntimeError(
+                f"Invalid fields for MES TX {tx_name}: {unknown}. Allowed fields: {allowed}"
+            )
+
+    def _describe_request_fields(self, request_type: Any) -> str:
+        if is_dataclass(request_type):
+            return ", ".join(field.name for field in fields(request_type))
+        return ""
+
+    def _resolve_mes_tx_name(self, action: str, tx: Dict[str, Any]) -> str:
+        tx_name = str(tx.get("trx_id", "") or "").strip().upper()
+        if tx_name:
+            return tx_name
+        normalized_action = str(action or "").strip().lower()
+        if normalized_action.startswith("mes_") and normalized_action != "mes_tx":
+            return normalized_action[4:].upper()
+        return ""
+
+    def _format_mes_tx_fields(self, tx: Dict[str, Any]) -> str:
+        parts = []
+        for key, value in tx.items():
+            if key == "trx_id" or value in (None, ""):
+                continue
+            parts.append(f"{key}={value}")
+        return " ".join(parts)
+
+    def _substitute_workflow_value(self, value: Any, variables: Dict[str, Any]) -> Any:
+        if isinstance(value, str):
+            result = value
+            for key, raw in variables.items():
+                result = result.replace(f"${{{key}}}", "" if raw is None else str(raw))
+            return result
+        if isinstance(value, list):
+            return [self._substitute_workflow_value(item, variables) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: self._substitute_workflow_value(item, variables)
+                for key, item in value.items()
+            }
+        return value
+
+    async def _step_configure_collection_events(
+        self,
+        idx: int,
+        step: Dict[str, Any],
+        eap_api: Any,
+        context: Dict[str, Any],
+        state: Dict[str, Any],
+    ) -> bool:
+        raw_config = step.get("config") or context.get("collection_event_config") or {}
+        builder = EventReportSetupBuilder(raw_config)
+        enable_mode = step.get("enable_mode")
+        commands = builder.build_commands(enable_mode=enable_mode)
+        timeout = step.get("timeout")
+
+        if not builder.schema.reports:
+            logger.warning(
+                "Workflow step %d skipped: no collection event reports configured for configure_collection_events",
+                idx,
+            )
+            return True
+
+        logger.info(
+            "Workflow step %d: configure collection events reports=%d events=%d enable=%s",
+            idx,
+            len(builder.schema.reports),
+            len(builder.schema.events),
+            enable_mode or builder.options.enable_mode,
+        )
+
+        for command in commands:
+            logger.info(
+                "Workflow step %d: send S%dF%d and wait %s (%s)",
+                idx,
+                command.stream,
+                command.function,
+                command.expected_reply_sf,
+                command.name,
+            )
+            reply = await eap_api.send_message(
+                stream=command.stream,
+                function=command.function,
+                items=command.items,
+                wait_reply=True,
+                timeout=timeout,
+            )
+            state["last_reply"] = reply
+            ack = self._extract_ack_code(reply)
+            ack_text = format_reply_ack(reply.sf if reply else command.expected_reply_sf, ack)
+            if not reply or reply.sf != command.expected_reply_sf:
+                state["last_error"] = RuntimeError(
+                    f"{command.name} expected {command.expected_reply_sf}, got {reply.sf if reply else 'no reply'}"
+                )
+                logger.warning("Workflow step %d %s failed: %s", idx, command.name, state["last_error"])
+                return False
+            if ack != 0:
+                state["last_error"] = RuntimeError(
+                    f"{command.name} {ack_text} from {command.expected_reply_sf}"
+                )
+                logger.warning(
+                    "Workflow step %d %s failed: %s",
+                    idx,
+                    command.name,
+                    ack_text,
+                )
+                return False
+            logger.info(
+                "Workflow step %d: %s acknowledged by %s %s",
+                idx,
+                command.name,
+                reply.sf,
+                ack_text,
+            )
+
+        state["last_error"] = None
+        return True
 
     async def _step_send_message(
         self,
@@ -294,12 +442,70 @@ class WorkflowEngine:
             return None
         return None
 
-    def _extract_variables(self, message: SECSMessage) -> Dict[str, Any]:
+    def _extract_ack_code(self, reply: Optional[SECSMessage]) -> Optional[int]:
+        if not reply or not reply.items:
+            return None
+        first = reply.items[0]
+        value = first.value
+        try:
+            if first.type == SECSType.BOOLEAN:
+                return 1 if bool(value) else 0
+            if isinstance(value, bytes):
+                return value[0] if value else 0
+            if isinstance(value, bool):
+                return 1 if value else 0
+            if value is not None:
+                return int(value)
+        except Exception:
+            return None
+        return None
+
+    def _extract_variables(
+        self,
+        message: SECSMessage,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         vars_: Dict[str, Any] = {"sf": message.sf}
-        # Friendly example variable for S6F11-like flow.
-        if message.sf == "S6F11" and message.items:
-            vars_["job_id"] = message.items[0].value
+        context = context or {}
+        collection_event = context.get("collection_event")
+        if isinstance(collection_event, dict):
+            vars_["data_id"] = collection_event.get("data_id")
+            vars_["ceid"] = collection_event.get("ceid", "")
+            vars_["event_name"] = collection_event.get("name", "")
+            reports = collection_event.get("reports", []) or []
+            rptids = [report.get("rptid") for report in reports if report.get("rptid") not in (None, "")]
+            if rptids:
+                vars_["rptids"] = rptids
+                vars_["rptid"] = rptids[0] if len(rptids) == 1 else rptids
+            vars_.update(collection_event.get("fields", {}))
         return vars_
+
+    def _trigger_matches(self, trigger: Dict[str, Any], variables: Dict[str, Any]) -> bool:
+        """Check optional workflow trigger filters beyond S/F."""
+        for key, expected in (trigger or {}).items():
+            if key == "sf":
+                continue
+            actual = variables.get(key)
+            if not self._trigger_value_matches(actual, expected):
+                return False
+        return True
+
+    def _trigger_value_matches(self, actual: Any, expected: Any) -> bool:
+        if expected is None:
+            return True
+        if actual is None:
+            return False
+
+        if isinstance(actual, (list, tuple, set)):
+            actual_values = {str(value) for value in actual}
+            if isinstance(expected, (list, tuple, set)):
+                return all(str(value) in actual_values for value in expected)
+            return str(expected) in actual_values
+
+        if isinstance(expected, (list, tuple, set)):
+            return str(actual) in {str(value) for value in expected}
+
+        return str(actual) == str(expected)
 
     def _build_items(self, item_defs: List[Dict[str, Any]], vars_: Dict[str, Any]) -> List[SECSItem]:
         return [self._build_item(item_def, vars_) for item_def in item_defs]
@@ -318,6 +524,10 @@ class WorkflowEngine:
 
         if item_type == "A":
             return SECSItem.ascii("" if value is None else str(value))
+        if item_type in ("BOOLEAN", "BOOL", "BL"):
+            if isinstance(value, str):
+                return SECSItem.boolean(value.strip().upper() in ("1", "T", "TRUE", "Y", "YES", "ON"))
+            return SECSItem.boolean(bool(value))
         if item_type == "U1":
             return SECSItem.uint1(int(value or 0))
         if item_type == "U2":
@@ -339,4 +549,3 @@ class WorkflowEngine:
 
         logger.warning("Unknown item type in workflow: %s, fallback to ASCII", item_type)
         return SECSItem.ascii("" if value is None else str(value))
-

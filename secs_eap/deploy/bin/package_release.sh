@@ -25,14 +25,14 @@ STAGE_DIR="$(mktemp -d)"
 trap 'rm -rf "${STAGE_DIR}"' EXIT
 
 mkdir -p "${STAGE_DIR}/deploy"
-cp -R "${DEPLOY_DIR}/bin" "${STAGE_DIR}/deploy/"
-cp -R "${DEPLOY_DIR}/config" "${STAGE_DIR}/deploy/"
-cp -R "${DEPLOY_DIR}/lib" "${STAGE_DIR}/deploy/"
+rsync -a "${DEPLOY_DIR}/bin/" "${STAGE_DIR}/deploy/bin/" --exclude ".DS_Store"
+rsync -a "${DEPLOY_DIR}/config/" "${STAGE_DIR}/deploy/config/" --exclude ".DS_Store"
+rsync -a "${DEPLOY_DIR}/lib/" "${STAGE_DIR}/deploy/lib/" --exclude ".DS_Store"
 
 if [[ ${INCLUDE_LOGS} -eq 1 ]]; then
   mkdir -p "${STAGE_DIR}/deploy/log"
   if [[ -d "${DEPLOY_DIR}/log" ]]; then
-    cp -R "${DEPLOY_DIR}/log/." "${STAGE_DIR}/deploy/log/" || true
+    rsync -a "${DEPLOY_DIR}/log/" "${STAGE_DIR}/deploy/log/" --exclude ".DS_Store" || true
   fi
 else
   mkdir -p "${STAGE_DIR}/deploy/log"
