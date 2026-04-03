@@ -5,14 +5,17 @@ IBM MQ service wrapper for MES transactions.
 from dataclasses import dataclass, field
 import json
 import logging
+import queue
 import re
+import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from secs_driver.src.logging_utils import format_tagged_block
 
+from .tx.base import build_tx_dataclass
 from .tx.apvryope import APVRYOPERequest, APVRYOPEResponse
-from .tx_registry import get_tx_response_type, get_tx_route
+from .tx_registry import get_tx_request_type, get_tx_response_type, get_tx_route
 
 
 logger = logging.getLogger(__name__)
@@ -84,6 +87,33 @@ def _format_mq_id(value) -> str:
     return raw.hex().upper()
 
 
+def _normalize_mq_text(value) -> str:
+    """Normalize MQ text fields that may be fixed-length bytes or plain strings."""
+    if value is None:
+        return ""
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            text = bytes(value).decode("utf-8", errors="ignore")
+        except Exception:
+            return ""
+        return text.replace("\x00", "").strip()
+    return str(value).strip()
+
+
+def _extract_equipment_id_from_payload(payload: Optional[Dict[str, Any]]) -> str:
+    """Best-effort extraction of equipment id from transaction payload."""
+    if not isinstance(payload, dict):
+        return ""
+    root = payload.get("transaction", payload)
+    if not isinstance(root, dict):
+        return ""
+    for key in ("eqp_id", "eqpt_id", "EQP_ID", "EQPT_ID"):
+        value = _normalize_mq_text(root.get(key, ""))
+        if value:
+            return value
+    return ""
+
+
 def _format_json_for_log(payload) -> str:
     """Pretty-print JSON payloads for readable logs."""
     try:
@@ -121,7 +151,7 @@ class MesMqConfig:
     # Cluster mode
     mq_conn_list: Dict[str, str] = field(default_factory=dict)
     mq_listener: Dict[str, str] = field(default_factory=dict)
-    mq_sender: Dict[str, str] = field(default_factory=dict)  # name -> QM alias (e.g. MQ1 -> QM1)
+    mq_sender: Dict[str, str] = field(default_factory=dict)  # name -> sender alias (e.g. MQ1 -> GW1)
 
     user: str = ""
     password: str = ""
@@ -147,6 +177,21 @@ class MesMqConfig:
         )
 
 
+@dataclass
+class InboundMesTxMessage:
+    tx_name: str
+    payload: Dict[str, Any]
+    request: Any
+    raw_payload: str
+    listener_alias: str
+    listener_queue: str
+    reply_to_queue: str = ""
+    reply_to_qmgr: str = ""
+    msg_id: bytes = b""
+    correl_id: bytes = b""
+    appl_identity_data: str = ""
+
+
 class MesMqService:
     """
     Minimal synchronous MQ client for Python-based MES TX codecs.
@@ -155,10 +200,20 @@ class MesMqService:
     def __init__(self, config: MesMqConfig):
         self._config = config
         self._qmgr_by_alias: Dict[str, object] = {}
+        self._listener_thread: Optional[threading.Thread] = None
+        self._listener_stop_event = threading.Event()
+        self._listener_callback: Optional[Callable[[InboundMesTxMessage], None]] = None
+        self._pending_replies: Dict[str, "queue.Queue[Tuple[bytes, Any, str, str]]"] = {}
+        self._orphan_replies: Dict[str, Tuple[bytes, Any, str, str]] = {}
+        self._pending_lock = threading.Lock()
 
     @property
     def is_connected(self) -> bool:
         return bool(self._qmgr_by_alias)
+
+    @property
+    def listener_running(self) -> bool:
+        return self._listener_thread is not None and self._listener_thread.is_alive()
 
     def connect(self) -> None:
         _load_mq_client()
@@ -185,6 +240,7 @@ class MesMqService:
         logger.info("MES MQ connected in legacy mode")
 
     def close(self) -> None:
+        self.stop_listener()
         for alias, qmgr in list(self._qmgr_by_alias.items()):
             try:
                 qmgr.disconnect()
@@ -206,7 +262,46 @@ class MesMqService:
         if not hasattr(request, "to_payload"):
             raise RuntimeError(f"{tx_name} request object must provide to_payload()")
         tx_route = get_tx_route(tx_name)
-        conn_alias = self._resolve_sender_alias()
+        sender_aliases = self._resolve_sender_aliases()
+        last_exc: Optional[Exception] = None
+        for idx, conn_alias in enumerate(sender_aliases):
+            try:
+                return self._execute_tx_once(
+                    mq=mq,
+                    tx_name=tx_name,
+                    request=request,
+                    tx_route=tx_route,
+                    conn_alias=conn_alias,
+                )
+            except Exception as exc:
+                last_exc = exc
+                has_backup = idx < len(sender_aliases) - 1
+                request_put_ok = bool(getattr(exc, "_request_put_ok", False))
+                if not has_backup or request_put_ok:
+                    raise
+
+                next_alias = sender_aliases[idx + 1]
+                logger.warning(
+                    "MQ TX failover: %s primary_alias=%s backup_alias=%s reason=%s",
+                    tx_name,
+                    conn_alias,
+                    next_alias,
+                    exc,
+                )
+
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError(f"MQ TX failed without attempts: {tx_name}")
+
+    def _execute_tx_once(
+        self,
+        *,
+        mq: Any,
+        tx_name: str,
+        request: Any,
+        tx_route: Any,
+        conn_alias: str,
+    ) -> Any:
         request_queue = tx_route.request_queue
         listener_endpoints = self._resolve_listeners(conn_alias)
         primary_listener = listener_endpoints[0]
@@ -218,6 +313,8 @@ class MesMqService:
         reply_handles = []
         request_md = None
         last_reply_md = None
+        pending_key = ""
+        request_put_ok = False
         try:
             qmgr = self._connect_qmgr_fresh(conn_alias)
             req_q = mq.Queue(qmgr, request_queue)
@@ -243,6 +340,7 @@ class MesMqService:
             _set_if_present(request_md, "MsgType", _get_mq_constant(mq, "MQMT_REQUEST"))
 
             req_q.put(msg, request_md, pmo)
+            request_put_ok = True
             request_msg_id = getattr(request_md, "MsgId", None)
             request_correl_id = getattr(request_md, "CorrelId", None)
             logger.info(
@@ -264,15 +362,23 @@ class MesMqService:
                 ),
             )
 
-            reply_handles = self._open_reply_handles(mq, listener_endpoints)
             deadline = time.monotonic() + (self._config.timeout_ms / 1000.0)
-            reply_bytes, last_reply_md, reply_alias, reply_queue = self._wait_for_reply(
-                mq=mq,
-                tx_name=tx_name,
-                reply_handles=reply_handles,
-                request_msg_id=request_msg_id,
-                deadline=deadline,
-            )
+            if self.listener_running and request_msg_id is not None:
+                pending_key, reply_waiter = self._register_pending_reply(request_msg_id)
+                reply_bytes, last_reply_md, reply_alias, reply_queue = self._wait_for_listener_reply(
+                    tx_name=tx_name,
+                    waiter=reply_waiter,
+                    deadline=deadline,
+                )
+            else:
+                reply_handles = self._open_reply_handles(mq, listener_endpoints)
+                reply_bytes, last_reply_md, reply_alias, reply_queue = self._wait_for_reply(
+                    mq=mq,
+                    tx_name=tx_name,
+                    reply_handles=reply_handles,
+                    request_msg_id=request_msg_id,
+                    deadline=deadline,
+                )
             raw_payload = reply_bytes.decode("utf-8", errors="ignore")
             try:
                 reply_obj = json.loads(raw_payload)
@@ -311,6 +417,7 @@ class MesMqService:
                 reply_app_id,
                 exc,
             )
+            setattr(exc, "_request_put_ok", request_put_ok)
             raise
         finally:
             try:
@@ -318,6 +425,8 @@ class MesMqService:
                     req_q.close()
             except Exception:
                 pass
+            if pending_key:
+                self._unregister_pending_reply(pending_key)
             try:
                 for reply_qmgr, rep_q, _reply_alias, _reply_queue in reply_handles:
                     try:
@@ -328,6 +437,108 @@ class MesMqService:
                         reply_qmgr.disconnect()
                     except Exception:
                         pass
+            except Exception:
+                pass
+            try:
+                if qmgr:
+                    qmgr.disconnect()
+            except Exception:
+                pass
+
+    def start_listener(self, callback: Callable[[InboundMesTxMessage], None]) -> None:
+        """Start a background listener for inbound TX requests and shared replies."""
+        if self.listener_running:
+            logger.info("MES MQ listener already running")
+            self._listener_callback = callback
+            return
+        if not self._config.mq_listener:
+            raise RuntimeError("No MQ listener configured")
+
+        self._listener_callback = callback
+        self._listener_stop_event.clear()
+        self._listener_thread = threading.Thread(
+            target=self._listener_loop,
+            name="MesMqListener",
+            daemon=True,
+        )
+        self._listener_thread.start()
+        logger.info("MES MQ listener started")
+
+    def stop_listener(self) -> None:
+        """Stop the background listener thread."""
+        thread = self._listener_thread
+        if not thread:
+            return
+
+        self._listener_stop_event.set()
+        thread.join(timeout=5.0)
+        if thread.is_alive():
+            logger.warning("MES MQ listener did not stop within timeout")
+        else:
+            logger.info("MES MQ listener stopped")
+        self._listener_thread = None
+        self._listener_callback = None
+
+    def reply_incoming_tx(self, request: InboundMesTxMessage, response: Any) -> None:
+        """Reply to one inbound MES TX request using its MQ metadata."""
+        mq = _load_mq_client()
+        tx_name = str(request.tx_name or getattr(response, "trx_id", "") or "").strip().upper()
+        if not tx_name:
+            raise RuntimeError("Inbound TX reply failed: missing tx_name")
+        if not hasattr(response, "to_payload"):
+            raise RuntimeError(f"Inbound TX reply failed: {tx_name} response must provide to_payload()")
+
+        route = get_tx_route(tx_name)
+        reply_queue = str(request.reply_to_queue or route.reply_queue or "").strip()
+        if not reply_queue:
+            raise RuntimeError(f"Inbound TX reply failed: no reply queue for {tx_name}")
+
+        reply_alias = self._resolve_reply_alias(request.listener_alias, request.reply_to_qmgr)
+        qmgr = None
+        rep_q = None
+        response_md = None
+        try:
+            qmgr = self._connect_qmgr_fresh(reply_alias)
+            rep_q = mq.Queue(qmgr, reply_queue)
+
+            payload = response.to_payload()
+            msg = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            _log_json_block("MQ inbound TX reply(JSON):", payload)
+
+            response_md = mq.MD()
+            pmo = mq.PMO()
+            request_msg_id = request.msg_id if not self._is_blank_mq_id(request.msg_id) else None
+            request_correl_id = request.correl_id if not self._is_blank_mq_id(request.correl_id) else None
+            reply_correl_id = request_correl_id or request_msg_id
+            _set_if_present(
+                pmo,
+                "Options",
+                (_get_mq_constant(mq, "MQPMO_FAIL_IF_QUIESCING") or 0),
+            )
+            _set_if_present(response_md, "MsgId", request_msg_id)
+            _set_if_present(response_md, "CorrelId", reply_correl_id)
+            _set_if_present(response_md, "CodedCharSetId", self._config.ccsid)
+            _set_if_present(response_md, "Format", _get_mq_constant(mq, "MQFMT_STRING"))
+            _set_if_present(response_md, "MsgType", _get_mq_constant(mq, "MQMT_REPLY"))
+            user_id = getattr(response, "user_id", "") or getattr(request.request, "user_id", "")
+            _set_if_present(response_md, "UserIdentifier", str(user_id)[:12] if user_id else None)
+
+            rep_q.put(msg, response_md, pmo)
+            logger.info(
+                "MQ inbound TX replied: %s qm_alias=%s reply_queue=%s request_msg_id=%s request_correl_id=%s "
+                "reply_msg_id=%s reply_correl_id=%s",
+                tx_name,
+                reply_alias,
+                reply_queue,
+                _format_mq_id(request.msg_id),
+                _format_mq_id(request.correl_id),
+                _format_mq_id(getattr(response_md, "MsgId", None)),
+                _format_mq_id(getattr(response_md, "CorrelId", None)),
+            )
+        finally:
+            try:
+                if rep_q:
+                    rep_q.close()
             except Exception:
                 pass
             try:
@@ -347,15 +558,27 @@ class MesMqService:
         return payload
 
     def _resolve_sender_alias(self) -> str:
-        if self._config.mq_sender:
-            first = next(iter(self._config.mq_sender.values()))
-            if first:
-                return first
+        return self._resolve_sender_aliases()[0]
+
+    def _resolve_sender_aliases(self) -> List[str]:
+        sender_aliases: List[str] = []
+        seen = set()
+        for configured in self._config.mq_sender.values():
+            alias = str(configured or "").strip()
+            if not alias or alias in seen:
+                continue
+            if self._config.mq_conn_list and alias not in self._config.mq_conn_list:
+                raise RuntimeError(f"MQ sender alias not found in mq_conn_list: {alias}")
+            seen.add(alias)
+            sender_aliases.append(alias)
+
+        if sender_aliases:
+            return sender_aliases
         # Fallback: use first listener alias.
         if self._config.mq_listener:
             endpoint = next(iter(self._config.mq_listener.values()))
             alias, _queue, _eqpt = self._parse_endpoint(endpoint)
-            return alias
+            return [alias]
         raise RuntimeError("No MQ sender alias configured")
 
     def _resolve_listener(self, conn_alias: str) -> str:
@@ -382,6 +605,30 @@ class MesMqService:
         if listeners:
             return listeners
         raise RuntimeError(f"No MQ listener configured for alias={conn_alias}")
+
+    def _resolve_reply_alias(self, listener_alias: str, reply_to_qmgr: str) -> str:
+        if reply_to_qmgr:
+            matched = self._find_alias_by_qmgr_name(reply_to_qmgr)
+            if matched:
+                return matched
+            logger.warning(
+                "ReplyToQMgr %s is not in mq_conn_list, fallback to listener alias %s",
+                reply_to_qmgr,
+                listener_alias,
+            )
+        if listener_alias:
+            return listener_alias
+        return self._resolve_sender_alias()
+
+    def _find_alias_by_qmgr_name(self, qmgr_name: str) -> str:
+        target = str(qmgr_name or "").strip().upper()
+        if not target:
+            return ""
+        for alias, spec in self._config.mq_conn_list.items():
+            spec_qmgr, _channel, _conn_name = self._parse_conn_spec(spec)
+            if spec_qmgr.upper() == target:
+                return alias
+        return ""
 
     def _get_or_connect_qmgr(self, alias: str):
         if alias in self._qmgr_by_alias:
@@ -464,6 +711,27 @@ class MesMqService:
             handles.append((reply_qmgr, rep_q, reply_alias, reply_queue))
         return handles
 
+    def _open_listener_handles(self, mq):
+        handles = []
+        for endpoint in self._config.mq_listener.values():
+            listener_alias, listener_queue, listener_app_id = self._parse_endpoint(endpoint)
+            listener_qmgr = self._connect_qmgr_fresh(listener_alias)
+            listener_q = mq.Queue(listener_qmgr, listener_queue)
+            handles.append((listener_qmgr, listener_q, listener_alias, listener_queue, listener_app_id))
+        return handles
+
+    @staticmethod
+    def _close_handles(handles) -> None:
+        for qmgr, q, *_rest in handles:
+            try:
+                q.close()
+            except Exception:
+                pass
+            try:
+                qmgr.disconnect()
+            except Exception:
+                pass
+
     def _wait_for_reply(
         self,
         mq,
@@ -529,6 +797,259 @@ class MesMqService:
 
             if last_no_msg_exc is not None and time.monotonic() >= deadline:
                 raise last_no_msg_exc
+
+    def _register_pending_reply(
+        self,
+        request_msg_id,
+    ) -> Tuple[str, "queue.Queue[Tuple[bytes, Any, str, str]]"]:
+        pending_key = _format_mq_id(request_msg_id)
+        waiter: "queue.Queue[Tuple[bytes, Any, str, str]]" = queue.Queue(maxsize=1)
+        orphan = None
+        with self._pending_lock:
+            self._pending_replies[pending_key] = waiter
+            orphan = self._orphan_replies.pop(pending_key, None)
+
+        if orphan is not None:
+            try:
+                waiter.put_nowait(orphan)
+            except queue.Full:
+                pass
+        return pending_key, waiter
+
+    def _unregister_pending_reply(self, pending_key: str) -> None:
+        with self._pending_lock:
+            self._pending_replies.pop(pending_key, None)
+
+    def _wait_for_listener_reply(
+        self,
+        tx_name: str,
+        waiter: "queue.Queue[Tuple[bytes, Any, str, str]]",
+        deadline: float,
+    ) -> Tuple[bytes, Any, str, str]:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"Timed out waiting MQ reply for {tx_name}")
+            try:
+                return waiter.get(timeout=remaining)
+            except queue.Empty as exc:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Timed out waiting MQ reply for {tx_name}") from exc
+
+    def _listener_loop(self) -> None:
+        mq = _load_mq_client()
+        while not self._listener_stop_event.is_set():
+            handles = []
+            try:
+                handles = self._open_listener_handles(mq)
+                while not self._listener_stop_event.is_set():
+                    received = False
+                    for _qmgr, rep_q, reply_alias, reply_queue, reply_app_id in handles:
+                        reply_md = mq.MD()
+                        gmo = mq.GMO()
+                        gmo.Options = mq.CMQC.MQGMO_WAIT | mq.CMQC.MQGMO_FAIL_IF_QUIESCING
+                        gmo.WaitInterval = 1000
+                        try:
+                            reply_bytes = rep_q.get(None, reply_md, gmo)
+                        except Exception as exc:
+                            if _is_no_msg_available(exc):
+                                continue
+                            raise
+
+                        received = True
+                        self._dispatch_listener_message(
+                            reply_bytes=reply_bytes,
+                            reply_md=reply_md,
+                            reply_alias=reply_alias,
+                            reply_queue=reply_queue,
+                            reply_app_id=reply_app_id,
+                        )
+                    if not received:
+                        time.sleep(0.05)
+            except Exception as exc:
+                if self._listener_stop_event.is_set():
+                    break
+                logger.error("MES MQ listener loop error: %s", exc)
+                time.sleep(1.0)
+            finally:
+                self._close_handles(handles)
+
+    def _dispatch_listener_message(
+        self,
+        reply_bytes: bytes,
+        reply_md,
+        reply_alias: str,
+        reply_queue: str,
+        reply_app_id: str,
+    ) -> None:
+        raw_payload = reply_bytes.decode("utf-8", errors="ignore")
+        payload = None
+        try:
+            payload = json.loads(raw_payload)
+        except Exception:
+            payload = None
+
+        envelope = (reply_bytes, reply_md, reply_alias, reply_queue)
+        if self._try_route_pending_reply(reply_md, payload, envelope):
+            return
+
+        if not isinstance(payload, dict):
+            logger.warning(
+                "MES MQ listener skipped non-JSON message alias=%s queue=%s msg_id=%s",
+                reply_alias,
+                reply_queue,
+                _format_mq_id(getattr(reply_md, "MsgId", None)),
+            )
+            return
+
+        configured_equipment_id = _normalize_mq_text(reply_app_id)
+        message_equipment_id = _normalize_mq_text(getattr(reply_md, "ApplIdentityData", ""))
+        payload_equipment_id = _extract_equipment_id_from_payload(payload)
+
+        # Shared queue guard: only process messages for the configured equipment.
+        # Prefer payload eqp_id/eqpt_id when available because some upstream
+        # producers populate MQMD.ApplIdentityData with non-equipment markers
+        # (e.g. trx_id) on shared queues.
+        if configured_equipment_id:
+            candidates = []
+            if payload_equipment_id:
+                candidates.append(("payload", payload_equipment_id))
+            if message_equipment_id:
+                candidates.append(("appl_identity_data", message_equipment_id))
+
+            matched = any(value == configured_equipment_id for _src, value in candidates)
+            if candidates and not matched:
+                first_src, first_value = candidates[0]
+                logger.info(
+                    "MES MQ listener skip by equipment id: expected=%s actual=%s source=%s payload_eqp=%s app_id=%s alias=%s queue=%s msg_id=%s",
+                    configured_equipment_id,
+                    first_value,
+                    first_src,
+                    payload_equipment_id,
+                    message_equipment_id,
+                    reply_alias,
+                    reply_queue,
+                    _format_mq_id(getattr(reply_md, "MsgId", None)),
+                )
+                return
+
+        tx_name = self._extract_tx_name(payload)
+        if not tx_name:
+            logger.warning(
+                "MES MQ listener skipped message without trx_id alias=%s queue=%s payload=%s",
+                reply_alias,
+                reply_queue,
+                raw_payload,
+            )
+            return
+
+        request = self._decode_tx_request(tx_name, payload, raw_payload)
+        logger.info(
+            "MES MQ inbound TX received: %s qm_alias=%s queue=%s msg_id=%s reply_to_q=%s reply_to_qmgr=%s app_id=%s",
+            tx_name,
+            reply_alias,
+            reply_queue,
+            _format_mq_id(getattr(reply_md, "MsgId", None)),
+            _normalize_mq_text(getattr(reply_md, "ReplyToQ", "")),
+            _normalize_mq_text(getattr(reply_md, "ReplyToQMgr", "")),
+            reply_app_id,
+        )
+        callback = self._listener_callback
+        if callback:
+            callback(
+                InboundMesTxMessage(
+                    tx_name=tx_name,
+                    payload=payload,
+                    request=request,
+                    raw_payload=raw_payload,
+                    listener_alias=reply_alias,
+                    listener_queue=reply_queue,
+                    reply_to_queue=_normalize_mq_text(getattr(reply_md, "ReplyToQ", "")),
+                    reply_to_qmgr=_normalize_mq_text(getattr(reply_md, "ReplyToQMgr", "")),
+                    msg_id=getattr(reply_md, "MsgId", None) or b"",
+                    correl_id=getattr(reply_md, "CorrelId", None) or b"",
+                    appl_identity_data=message_equipment_id or configured_equipment_id,
+                )
+            )
+
+    def _try_route_pending_reply(
+        self,
+        reply_md,
+        payload: Optional[Dict[str, Any]],
+        envelope: Tuple[bytes, Any, str, str],
+    ) -> bool:
+        reply_keys = []
+        for candidate in (getattr(reply_md, "CorrelId", None), getattr(reply_md, "MsgId", None)):
+            if self._is_blank_mq_id(candidate):
+                continue
+            key = _format_mq_id(candidate)
+            if key and key not in reply_keys:
+                reply_keys.append(key)
+
+        if not reply_keys:
+            return False
+
+        tx_type_id = self._extract_type_id(payload)
+        with self._pending_lock:
+            for key in reply_keys:
+                waiter = self._pending_replies.get(key)
+                if waiter is not None:
+                    try:
+                        waiter.put_nowait(envelope)
+                    except queue.Full:
+                        logger.warning("Pending MQ reply waiter already full for key=%s", key)
+                    return True
+
+            # Explicit inbound requests (type_id=I) must continue into TX handling,
+            # even when MQMD carries a non-blank CorrelId on shared queues.
+            if tx_type_id == "I":
+                return False
+
+            # For explicit replies (type_id=O) or unknown type, keep orphan buffering
+            # to handle races where reply arrives before pending waiter registration.
+            self._orphan_replies[reply_keys[0]] = envelope
+        logger.debug(
+            "Stored orphan MQ reply for key=%s type_id=%s",
+            reply_keys[0],
+            tx_type_id or "<empty>",
+        )
+        return True
+
+    @staticmethod
+    def _extract_tx_name(payload: Dict[str, Any]) -> str:
+        root = payload.get("transaction", payload) if isinstance(payload, dict) else {}
+        if not isinstance(root, dict):
+            return ""
+        value = root.get("trx_id", root.get("TRX_ID", ""))
+        return str(value or "").strip().upper()
+
+    @staticmethod
+    def _extract_type_id(payload: Optional[Dict[str, Any]]) -> str:
+        root = payload.get("transaction", payload) if isinstance(payload, dict) else {}
+        if isinstance(root, dict):
+            return str(root.get("type_id", root.get("TYPE_ID", "")) or "").strip().upper()
+        return ""
+
+    @staticmethod
+    def _is_blank_mq_id(value) -> bool:
+        if value is None:
+            return True
+        try:
+            raw = bytes(value)
+        except Exception:
+            return not str(value).strip()
+        return not raw or all(byte == 0 for byte in raw)
+
+    @staticmethod
+    def _decode_tx_request(tx_name: str, payload: Dict[str, Any], raw_payload: str) -> Any:
+        request_type = get_tx_request_type(tx_name)
+        if request_type is None:
+            return payload
+        try:
+            return build_tx_dataclass(request_type, payload.get("transaction", payload), raw_payload=raw_payload)
+        except Exception as exc:
+            logger.warning("Failed to decode inbound TX %s as %s: %s", tx_name, request_type, exc)
+            return payload
 
     @staticmethod
     def _parse_conn_spec(spec: str) -> Tuple[str, str, str]:

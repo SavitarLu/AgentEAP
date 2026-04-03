@@ -7,6 +7,7 @@ from .eap_config import (
     EAPConfig,
     EquipmentConfig,
     MessageHandlerConfig,
+    PortConfig,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "EAPConfig",
     "EquipmentConfig",
     "MessageHandlerConfig",
+    "PortConfig",
 ]

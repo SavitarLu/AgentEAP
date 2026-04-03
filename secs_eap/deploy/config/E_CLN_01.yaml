@@ -1,0 +1,272 @@
+equipment:
+  name: "E_CLN_01"
+  host: "0.0.0.0"
+  port: 40080
+  mode: "passive"
+  device_id: 0
+  port_count: 2
+  ports:
+    - port_id: "1"
+      port_type: "loader"
+      name: "LoadPort01"
+      enabled: true
+    - port_id: "2"
+      port_type: "unloader"
+      name: "UnloadPort01"
+      enabled: true
+  user_id: "AGT"
+
+message_handler: {}
+
+mes_mq:
+  enabled: true
+  mq_conn_list:
+    GW1: "MESDEVGW1/MESDEVGW1.SVRCONN/95.40.166.36(51419)"
+    GW2: "MESDEVGW2/MESDEVGW2.SVRCONN/95.40.166.36(51420)"
+    QM1: "MESDEV01/MESDEV01.SVRCONN/95.40.166.36(41419)"
+    QM2: "MESDEV02/MESDEV02.SVRCONN/95.40.166.36(41420)"
+  mq_listener:
+    GW1: "GW1/F01.TCS.SHARE/E_CLN_01"
+    GW2: "GW2/F01.TCS.SHARE/E_CLN_01"
+    MES1: "QM1/F01.TCS.SHARE/E_CLN_01"
+    MES2: "QM2/F01.TCS.SHARE/E_CLN_01"
+  mq_sender:
+    MQ1: "GW1"
+    MQ2: "GW2"
+  timeout_ms: 60000
+
+business_logic:
+  collection_events:
+    id_types:
+      data_id: U4
+      ceid: U4
+      rptid: U4
+      vid: U4
+    report_setup:
+      clear_data_id: 0
+      define_data_id: 1
+      link_data_id: 1
+      enable_mode: selected 
+    variables:
+      303:
+        name: lp_id
+      310:
+        name: carrier_id
+      313:
+        name: slot_map
+      281:
+        name: control_job_id
+      283:
+        name: process_job_id
+      1000:
+        name: online_state
+    reports:
+      8701:
+        vids: [303]
+      8702:
+        vids: [310, 303]
+      8703:
+        vids: [303, 310, 313]
+      1002:
+        vids: [303, 310]
+      9401:
+        vids: [281]
+      4001:
+        vids: [283]
+      1000:
+        vids: [1000]
+    events:
+      101:
+        name: online_local
+        reports: [1000]
+      100:
+        name: offline
+        reports: [1000]
+      102:
+        name: online_remote
+        reports: [1000]
+      111:
+        name: carrier_arrived
+        reports: [8701]
+      112:
+        name: carrier_removed
+        reports: [1002]
+      136:
+        name: unload_request
+        reports: [1002]
+      135:
+        name: load_request
+        reports: [8701]
+      113:
+        name: carrier_waiting_for_host
+        reports: [1002]
+      118:
+        name: slot_map_waiting_for_host
+        reports: [8703]
+      133:
+        name: slot_map_verification_ok
+        reports: [8703]
+      125:
+        name: control_job_executing
+        reports: [9401]
+      602:
+        name: process_job_processing
+        reports: [4001]
+
+  workflows:
+    - name: "online_local_offline"
+      trigger:
+        sf: "S6F11"
+        event_name: ["online_local", "offline"]
+      steps:
+        - action: "call_method"
+          method: "UPDATE_EQP_MODE_STATUS"
+          mode: "MANU"
+          stat: ""
+
+    - name: "online_remote_setup"
+      trigger:
+        sf: "S6F11"
+        event_name: ["online_remote"]
+        online_state: 5
+      steps:
+        - action: "configure_collection_events"
+        - action: "call_method"
+          method: "UPDATE_EQP_MODE_STATUS"
+          mode: "AUTO"
+          stat: ""
+
+    - name: "carrier_arrived"
+      trigger:
+        sf: "S6F11"
+        event_name: ["carrier_arrived"]
+      steps:
+        - action: "call_method"
+          method: "LOAD_COMP"
+          port_type: "loader"
+          port_id: "${lp_id}"
+          carrier_id: ""
+
+    - name: "carrier_removed"
+      trigger:
+        sf: "S6F11"
+        event_name: ["carrier_removed"]
+      steps:
+        - action: "call_method"
+          method: "UNLOAD_COMP"
+          port_type: "loader"
+          port_id: "${lp_id}"
+          carrier_id: "${carrier_id}"
+
+    - name: "load_request"
+      trigger:
+        sf: "S6F11"
+        event_name: ["load_request"]
+      steps:
+        - action: "call_method"
+          method: "LOAD_REQ"
+          port_type: "loader"
+          port_id: "${lp_id}"
+
+    - name: "unload_request"
+      trigger:
+        sf: "S6F11"
+        event_name: ["unload_request"]
+      steps:
+        - action: "call_method"
+          method: "UNLOAD_REQ"
+          port_type: "loader"
+          port_id: "${lp_id}"
+          carrier_id: "${carrier_id}"
+
+    - name: "carrier_waiting_for_host"
+      trigger:
+        sf: "S6F11"
+        event_name: ["carrier_waiting_for_host"]
+      steps:
+        - action: "call_method"
+          method: "INQUIRY_PROC_START"
+          port_type: "loader"
+          port_id: "${lp_id}"
+          carrier_id: "${carrier_id}"
+          user_id: "${equipment_user_id}"
+          
+        - action: "send_secs_msg"
+          method: "S3F17_F18_ProceedWithCarrier"
+          carrier_id: "${carrier_id}"
+          port_id: "${lp_id}"
+          on_error:
+            - action: "call_method"
+              method: "PROCESS_START_CANCEL"
+              carrier_id: "${carrier_id}"
+              port_id: "${lp_id}"
+              user_id: "${equipment_user_id}"
+              sht_ope_msg: "${error_reply_error_text}"
+
+    - name: "slot_map_waiting_for_host"
+      trigger:
+        sf: "S6F11"
+        event_name: ["slot_map_waiting_for_host"]
+      steps:
+        - action: "call_method"
+          method: "VERIFY_SLOT_MAP_MATCHES_PORT_CONTEXT"
+          port_id: "${lp_id}"
+          carrier_id: "${carrier_id}"
+          slot_map: "${slot_map}"
+          on_error:
+            - action: "call_method"
+              method: "PROCESS_START_CANCEL"
+              carrier_id: "${carrier_id}"
+              port_id: "${lp_id}"
+              user_id: "${equipment_user_id}"
+              sht_ope_msg: "${error_reply_error_text}"
+            
+            - action: "send_secs_msg"
+              method: "S3F17_F18_CancelCarrier"
+              carrier_id: "${carrier_id}"
+              port_id: "${lp_id}"
+
+        - action: "send_secs_msg"
+          method: "S3F17_F18_ProceedWithSlotMap"
+          carrier_id: "${carrier_id}"
+          port_id: "${lp_id}"
+
+
+    - name: "slot_map_verification_ok"
+      trigger:
+        sf: "S6F11"
+        event_name: ["slot_map_verification_ok"]
+      steps:
+        - action: "send_secs_msg"
+          method: "S16F15_F16_MultipleProcessJobCreate"
+          port_id: "${lp_id}"
+          carrier_id: "${carrier_id}"
+          on_error:
+            - action: "call_method"
+              method: "PROCESS_START_CANCEL"
+              carrier_id: "${carrier_id}"
+              port_id: "${lp_id}"
+              user_id: "${equipment_user_id}"
+              sht_ope_msg: "${error_reply_error_text}"
+            
+            - action: "send_secs_msg"
+              method: "S3F17_F18_CancelCarrier"
+              carrier_id: "${carrier_id}"
+              port_id: "${lp_id}"
+
+        - action: "send_secs_msg"
+          method: "S14F9_F10_CreateControlJob"
+          port_id: "${lp_id}"
+          carrier_id: "${carrier_id}"
+          on_error:
+            - action: "call_method"
+              method: "PROCESS_START_CANCEL"
+              carrier_id: "${carrier_id}"
+              port_id: "${lp_id}"
+              user_id: "${equipment_user_id}"
+              sht_ope_msg: "${error_reply_error_text}"
+            
+            - action: "send_secs_msg"
+              method: "S3F17_F18_CancelCarrier"
+              carrier_id: "${carrier_id}"
+              port_id: "${lp_id}"

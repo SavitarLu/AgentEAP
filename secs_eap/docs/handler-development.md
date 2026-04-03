@@ -37,7 +37,7 @@
 
 跨消息联动流程建议优先写在 YAML 里，而不是直接塞进 handler：
 
-- 配置文件：`deploy/config/EQP001.yaml`
+- 配置文件：`deploy/config/E_CLN_01.yaml`
 - 配置字段：`business_logic.workflows`
 
 也可以通过 `business_logic.workflow_file` 额外加载工作流文件。
@@ -46,10 +46,41 @@
 
 - 通过 `sf` 触发，例如 `S6F11`
 - `send_message`
+- `call_method`，优先调用 `services/call_method.py` 中的公开方法
+- `mes_apceqpst`
 - `mes_apvryope`
 - `if_hcack`
 - `wait_reply`
 - `${variable}` 形式的简单变量替换
+- `equipment_user_id` 之类的设备级配置变量会自动注入到 workflow 变量里
+
+`call_method` 示例：
+
+```yaml
+- action: "call_method"
+  method: "inquiry_proc_start"
+  port_type: "loader"
+  port_id: "${lp_id}"
+  carrier_id: "${carrier_id}"
+  user_id: "${equipment_user_id}"
+```
+
+```yaml
+- action: "call_method"
+  method: "update_eqp_mode_status"
+  mode: "AUTO"
+  stat: "IDLE"
+```
+
+```yaml
+- action: "call_method"
+  method: "load_comp"
+  port_type: "loader"
+  port_id: "${lp_id}"
+  carrier_id: "${carrier_id}"
+```
+
+如果设备事件里拿到的 `lp_id` 是数字，例如 `1`，工作流变量会自动规范成 MES 侧使用的两位格式 `01`。当前 `call_method` 和 YAML 一律使用 `port_type/port_id/carrier_id` 这套字段名。
 
 ## 可视化原型
 

@@ -6,13 +6,18 @@ SECS EAP - Equipment Automation Program
 """
 
 from .eap import EAP, run_eap
-from .config import EAPConfig, EquipmentConfig, MessageHandlerConfig
+from .config import EAPConfig, EquipmentConfig, MessageHandlerConfig, PortConfig
 from .driver_adapter import DriverAdapter, ConnectionState
 from .services import (
     EquipmentService,
     AlarmService,
     DataCollectionService,
     ProcessService,
+    PortContextStore,
+    PortLifecycleState,
+    PortRuntimeContext,
+    PortSheetContext,
+    PortType,
 )
 from .mes import (
     APVRYOPERequest,
@@ -36,12 +41,18 @@ __all__ = [
     "EAPConfig",
     "EquipmentConfig",
     "MessageHandlerConfig",
+    "PortConfig",
     "DriverAdapter",
     "ConnectionState",
     "EquipmentService",
     "AlarmService",
     "DataCollectionService",
     "ProcessService",
+    "PortContextStore",
+    "PortLifecycleState",
+    "PortRuntimeContext",
+    "PortSheetContext",
+    "PortType",
     "APVRYOPERequest",
     "APVRYOPEResponse",
     "MesMqConfig",

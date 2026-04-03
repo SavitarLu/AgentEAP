@@ -248,7 +248,9 @@ class TCPServer(TCPConnection):
         self._server: Optional[asyncio.Server] = None
         self._client_reader: Optional[asyncio.StreamReader] = None
         self._client_writer: Optional[asyncio.StreamWriter] = None
+        self._client_peer: Optional[tuple] = None
         self._server_task: Optional[asyncio.Task] = None
+        self._client_lock = asyncio.Lock()
 
     async def connect(self) -> bool:
         """
@@ -297,17 +299,35 @@ class TCPServer(TCPConnection):
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         """处理客户端连接"""
-        self._client_reader = reader
-        self._client_writer = writer
-        self._connected = True
-
         peername = writer.get_extra_info("peername")
-        logger.info(f"Client connected from {peername}")
+        old_writer: Optional[asyncio.StreamWriter] = None
+        old_peer: Optional[tuple] = None
 
+        async with self._client_lock:
+            if self._client_writer and self._client_writer is not writer:
+                old_writer = self._client_writer
+                old_peer = self._client_peer
+            self._client_reader = reader
+            self._client_writer = writer
+            self._client_peer = peername
+            self._connected = True
+
+        if old_writer is not None:
+            logger.warning(
+                "Replacing existing client connection old=%s new=%s",
+                old_peer,
+                peername,
+            )
+            await self._safe_close_writer(old_writer)
+
+        logger.info(f"Client connected from {peername}")
         self._trigger_callback("client_connected", peername)
 
         try:
-            while self._connected:
+            while True:
+                async with self._client_lock:
+                    if not self._connected or self._client_writer is not writer:
+                        break
                 try:
                     data = await asyncio.wait_for(
                         reader.read(4096), timeout=self.config.timeout
@@ -324,29 +344,26 @@ class TCPServer(TCPConnection):
             logger.error(f"Client handler error: {e}")
 
         finally:
-            self._connected = False
-            self._client_reader = None
-            self._client_writer = None
+            is_active_connection = False
+            async with self._client_lock:
+                if self._client_writer is writer:
+                    is_active_connection = True
+                    self._connected = False
+                    self._client_reader = None
+                    self._client_writer = None
+                    self._client_peer = None
 
-            try:
-                writer.close()
-                await writer.wait_closed()
-            except Exception:
-                pass
+            await self._safe_close_writer(writer)
 
-            logger.info(f"Client disconnected: {peername}")
-            self._trigger_callback("client_disconnected", peername)
+            if is_active_connection:
+                logger.info(f"Client disconnected: {peername}")
+                self._trigger_callback("client_disconnected", peername)
+            else:
+                logger.debug(f"Stale client handler exited: {peername}")
 
     async def disconnect(self) -> None:
         """停止服务器"""
-        self._connected = False
-
-        if self._client_writer:
-            try:
-                self._client_writer.close()
-                await asyncio.wait_for(self._client_writer.wait_closed(), timeout=5.0)
-            except Exception:
-                pass
+        await self.disconnect_client()
 
         if self._server:
             self._server.close()
@@ -358,6 +375,28 @@ class TCPServer(TCPConnection):
                     pass
 
         logger.info("Server stopped")
+
+    async def disconnect_client(self) -> None:
+        """仅断开当前客户端，保留服务端监听。"""
+        writer: Optional[asyncio.StreamWriter] = None
+        peername: Optional[tuple] = None
+        was_connected = False
+
+        async with self._client_lock:
+            writer = self._client_writer
+            peername = self._client_peer
+            was_connected = self._connected and writer is not None
+            self._connected = False
+            self._client_reader = None
+            self._client_writer = None
+            self._client_peer = None
+
+        if writer:
+            await self._safe_close_writer(writer)
+
+        if was_connected:
+            logger.info(f"Client disconnected: {peername}")
+            self._trigger_callback("client_disconnected", peername)
 
     async def send(self, data: bytes) -> None:
         """发送数据到客户端"""
@@ -398,6 +437,14 @@ class TCPServer(TCPConnection):
     def has_client(self) -> bool:
         """检查是否有客户端连接"""
         return self._connected and self._client_writer is not None
+
+    @staticmethod
+    async def _safe_close_writer(writer: asyncio.StreamWriter) -> None:
+        try:
+            writer.close()
+            await asyncio.wait_for(writer.wait_closed(), timeout=5.0)
+        except Exception:
+            pass
 
 
 def create_connection(config: ConnectionConfig) -> TCPConnection:

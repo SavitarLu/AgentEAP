@@ -21,18 +21,23 @@ from .message_handlers.s1_handler import S1HandlerManager
 from .message_handlers.s2_handler import S2HandlerManager
 from .message_handlers.s5_handler import S5HandlerManager
 from .message_handlers.s6_handler import S6HandlerManager
+from .message_handlers.s7_handler import S7HandlerManager
 from .services import (
     EquipmentService,
     AlarmService,
+    CallMethodService,
     DataCollectionService,
     ProcessService,
+    RecipeService,
+    SecsMessageService,
+    MesTxService,
     WorkflowEngine,
+    PortContextStore,
 )
 from .mes import (
     MesMqConfig,
     MesMqService,
-    APVRYOPERequest,
-    APVRYOPEResponse,
+    InboundMesTxMessage,
     TxRoute,
     get_tx_route,
     list_tx_routes,
@@ -70,15 +75,22 @@ class EAP:
         self._alarm_service: Optional[AlarmService] = None
         self._data_service: Optional[DataCollectionService] = None
         self._process_service: Optional[ProcessService] = None
+        self._recipe_service: Optional[RecipeService] = None
         self._workflow_engine: Optional[WorkflowEngine] = None
+        self._port_context_store: Optional[PortContextStore] = None
         self._mes_mq_service: Optional[MesMqService] = None
+        self._mes_tx_service: Optional[MesTxService] = None
+        self._call_method_service: Optional[CallMethodService] = None
+        self._secs_msg_service: Optional[SecsMessageService] = None
         self._mes_mq_connect_error: Optional[str] = None
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # 消息处理器管理器
         self._s1_manager: Optional[S1HandlerManager] = None
         self._s2_manager: Optional[S2HandlerManager] = None
         self._s5_manager: Optional[S5HandlerManager] = None
         self._s6_manager: Optional[S6HandlerManager] = None
+        self._s7_manager: Optional[S7HandlerManager] = None
 
         # 回调
         self._on_started: Optional[callable] = None
@@ -143,11 +155,32 @@ class EAP:
         self._process_service = ProcessService(
             self._config.business_logic.process_timeout
         )
+        self._recipe_service = RecipeService(
+            storage_dir=self._config.business_logic.recipe_directory,
+            allow_overwrite=self._config.business_logic.allow_recipe_overwrite,
+        )
         self._workflow_engine = WorkflowEngine(
             workflow_file=self._config.business_logic.workflow_file,
             inline_workflows=self._config.business_logic.workflows,
         )
         self._init_mes_mq()
+        mes_equipment_id = self._resolve_mes_equipment_id()
+        self._port_context_store = PortContextStore(
+            self._config.equipment.ports,
+            default_eqpt_id=mes_equipment_id,
+        )
+        self._call_method_service = CallMethodService(
+            config=self._config,
+            port_context_store=self._port_context_store,
+            mes_equipment_id=mes_equipment_id,
+        )
+        self._call_method_service.bind_eap_api(self)
+        self._secs_msg_service = SecsMessageService()
+        self._secs_msg_service.bind_eap_api(self)
+        self._mes_tx_service = MesTxService(
+            equipment_id=mes_equipment_id,
+            s7f19_timeout=self._config.message_handler.s7f19_timeout,
+        )
 
         # 设置服务依赖
         self._process_service.set_equipment_service(self._equipment_service)
@@ -164,6 +197,7 @@ class EAP:
         self._s2_manager = S2HandlerManager()
         self._s5_manager = S5HandlerManager()
         self._s6_manager = S6HandlerManager()
+        self._s7_manager = S7HandlerManager()
 
         # 注册处理器
         self._register_handlers()
@@ -175,7 +209,16 @@ class EAP:
             "data_collection_service": self._data_service,
             "collection_event_config": self._config.business_logic.collection_events,
             "process_service": self._process_service,
+            "recipe_service": self._recipe_service,
             "workflow_engine": self._workflow_engine,
+            "port_context_store": self._port_context_store,
+            "call_method_service": self._call_method_service,
+            "secs_msg_service": self._secs_msg_service,
+            "equipment_id": self._config.equipment.name,
+            "equipment_user_id": self._config.equipment.user_id,
+            "mes_equipment_id": mes_equipment_id,
+            "equipment_ports": self._config.equipment.ports,
+            "equipment_port_count": self._config.equipment.port_count,
             "eap_api": self,
         }.items():
             self._dispatcher.set_context(key, value)
@@ -196,6 +239,20 @@ class EAP:
 
         self._mes_mq_service = MesMqService(MesMqConfig.from_dict(mq_cfg))
 
+    def _resolve_mes_equipment_id(self) -> str:
+        """Resolve MES-facing equipment id from mq_listener endpoint app id first."""
+        mq_cfg = self._config.mes_mq or {}
+        listeners = mq_cfg.get("mq_listener", {}) or {}
+        if isinstance(listeners, dict):
+            for endpoint in listeners.values():
+                value = str(endpoint or "").strip()
+                parts = value.split("/", 2)
+                if len(parts) == 3:
+                    app_id = parts[2].strip()
+                    if app_id:
+                        return app_id
+        return str(self._config.equipment.name or "").strip()
+
     def _register_handlers(self) -> None:
         """注册消息处理器"""
         for stream, manager in (
@@ -203,6 +260,7 @@ class EAP:
             (2, self._s2_manager),
             (5, self._s5_manager),
             (6, self._s6_manager),
+            (7, self._s7_manager),
         ):
             self._registry.register(manager, stream=stream)
 
@@ -244,6 +302,7 @@ class EAP:
         logger.info("Starting EAP...")
 
         try:
+            self._event_loop = asyncio.get_running_loop()
             # 启动消息分发器
             await self._dispatcher.start()
 
@@ -261,10 +320,11 @@ class EAP:
                 try:
                     self._mes_mq_connect_error = None
                     self._mes_mq_service.connect()
+                    self._mes_mq_service.start_listener(self._on_mes_tx_received)
                 except Exception as mq_exc:
                     self._mes_mq_connect_error = str(mq_exc)
                     logger.warning(
-                        "MES MQ connect failed (workflow MQ steps will be skipped): %s",
+                        "MES MQ connect/listener failed (workflow MQ steps will be skipped): %s",
                         mq_exc,
                     )
 
@@ -291,12 +351,14 @@ class EAP:
             await self._driver_adapter.disconnect()
 
             if self._mes_mq_service:
+                self._mes_mq_service.stop_listener()
                 self._mes_mq_service.close()
 
             # 停止分发器
             await self._dispatcher.stop()
 
             self._running = False
+            self._event_loop = None
 
             # 触发回调
             await self._invoke_callback(self._on_stopped)
@@ -316,6 +378,37 @@ class EAP:
         """消息处理完成回调"""
         status = "OK" if success else "FAIL"
         logger.debug(f"Message {message.sf} handled: {status}")
+
+    def _on_mes_tx_received(self, inbound: InboundMesTxMessage) -> None:
+        """Schedule inbound MES TX processing onto the main asyncio loop."""
+        if not self._event_loop:
+            logger.warning("Skip inbound MES TX %s: event loop not ready", inbound.tx_name)
+            return
+
+        future = asyncio.run_coroutine_threadsafe(
+            self._handle_inbound_mes_tx(inbound),
+            self._event_loop,
+        )
+        future.add_done_callback(self._log_inbound_mes_tx_result)
+
+    @staticmethod
+    def _log_inbound_mes_tx_result(future) -> None:
+        try:
+            future.result()
+        except Exception as exc:
+            logger.error("Inbound MES TX task failed: %s", exc)
+
+    async def _handle_inbound_mes_tx(self, inbound: InboundMesTxMessage) -> None:
+        if not self._mes_mq_service or not self._mes_tx_service:
+            logger.warning("Skip inbound MES TX %s: MES services not ready", inbound.tx_name)
+            return
+
+        response = await self._mes_tx_service.handle_request(inbound, self)
+        if response is None:
+            return
+
+        await asyncio.to_thread(self._mes_mq_service.reply_incoming_tx, inbound, response)
+        logger.info("Inbound MES TX handled: %s", inbound.tx_name)
 
     def _on_no_handler(self, message) -> None:
         """无处理器回调"""
@@ -395,33 +488,15 @@ class EAP:
         """中止工艺"""
         return await self._process_service.abort_job()
 
-    async def query_lot_by_apvryope(
-        self,
-        eqpt_id: str,
-        port_id: str,
-        crr_id: str,
-        user_id: str,
-        trx_id: str = "APVRYOPE",
-    ) -> APVRYOPEResponse:
-        """
-        Use APVRYOPE TX to query lot info from MES via IBM MQ.
-        """
-        if not self._mes_mq_service:
-            raise RuntimeError("MES MQ is not enabled")
+    @property
+    def call_method_service(self) -> Optional[CallMethodService]:
+        """Workflow ``call_method`` target container."""
+        return self._call_method_service
 
-        # Try lazy reconnect once in case startup connect failed.
-        if not self._mes_mq_service.is_connected:
-            self._mes_mq_service.connect()
-
-        req = APVRYOPERequest(
-            trx_id=trx_id,
-            eqpt_id=eqpt_id,
-            port_id=port_id,
-            crr_id=crr_id,
-            user_id=user_id,
-        )
-        # MQ client is synchronous; offload to a thread to avoid blocking asyncio loop.
-        return await self.execute_mes_tx("APVRYOPE", req)
+    @property
+    def secs_msg_service(self) -> Optional[SecsMessageService]:
+        """Workflow SECS message template container."""
+        return self._secs_msg_service
 
     async def execute_mes_tx(self, tx_name: str, request: Any) -> Any:
         """Execute one registered MES TX with a Python request codec object."""
@@ -432,6 +507,24 @@ class EAP:
             self._mes_mq_service.connect()
 
         return await asyncio.to_thread(self._mes_mq_service.execute_tx, tx_name, request)
+
+    def get_port_context(self, eqpt_id: str, port_id: str):
+        """Get one in-memory port context."""
+        if not self._port_context_store:
+            return None
+        return self._port_context_store.get(eqpt_id, port_id)
+
+    def update_port_context(self, eqpt_id: str, port_id: str, **changes):
+        """Update one in-memory port context."""
+        if not self._port_context_store:
+            return None
+        return self._port_context_store.update(eqpt_id, port_id, **changes)
+
+    def clear_port_contexts(self, eqpt_id: str = "", reason: str = "offline"):
+        """Clear port contexts for one equipment or all equipment."""
+        if not self._port_context_store:
+            return []
+        return self._port_context_store.clear_equipment(eqpt_id=eqpt_id, reason=reason)
 
     def is_mes_mq_ready(self) -> bool:
         # Workflow steps may use a fresh connection per TX, so "configured/enabled"
@@ -490,6 +583,11 @@ class EAP:
     def data_service(self) -> DataCollectionService:
         """获取数据收集服务"""
         return self._data_service
+
+    @property
+    def port_context_store(self) -> PortContextStore:
+        """获取端口上下文仓库"""
+        return self._port_context_store
 
     @property
     def process_service(self) -> ProcessService:

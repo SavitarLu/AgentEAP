@@ -18,6 +18,16 @@ def _normalize_id(value: Any) -> str:
     return str(value).strip()
 
 
+def _normalize_mes_port_id(value: Any) -> Any:
+    """Normalize MES-facing port ids to 2 digits when numeric."""
+    if value is None:
+        return value
+    text = str(value).strip()
+    if text.isdigit():
+        return str(int(text)).zfill(2)
+    return value
+
+
 def _item_to_python(item: Optional[SECSItem]) -> Any:
     """Convert one SECS item into plain Python data."""
     if item is None:
@@ -225,6 +235,8 @@ class CollectionEventParser:
                     value=_item_to_python(value_item),
                     item_type=SECSTypeInfo.get_name(value_item.type),
                 )
+                if value_name.strip().lower() in {"lp_id", "port_id"} or value_name.strip().lower().endswith("_port_id"):
+                    value.value = _normalize_mes_port_id(value.value)
                 report.values.append(value)
                 payload.fields[value_name] = value.value
 

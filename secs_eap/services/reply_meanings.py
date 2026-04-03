@@ -3,7 +3,7 @@ Human-readable meanings for common SECS reply acknowledgment codes.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -11,16 +11,24 @@ class ReplyAckSpec:
     field_name: str
     meanings: Dict[int, str] = field(default_factory=dict)
     default_meaning: str = "Unknown Ack Code."
+    success_codes: Tuple[int, ...] = (0,)
 
 
 def _register_reply_specs() -> Dict[str, ReplyAckSpec]:
     specs: Dict[str, ReplyAckSpec] = {}
 
-    def add(reply_sfs, field_name: str, meanings: Dict[int, str], default_meaning: str = "Unknown Ack Code.") -> None:
+    def add(
+        reply_sfs,
+        field_name: str,
+        meanings: Dict[int, str],
+        default_meaning: str = "Unknown Ack Code.",
+        success_codes: Tuple[int, ...] = (0,),
+    ) -> None:
         spec = ReplyAckSpec(
             field_name=field_name,
             meanings=dict(meanings),
             default_meaning=default_meaning,
+            success_codes=tuple(success_codes or ()),
         )
         for reply_sf in reply_sfs:
             specs[str(reply_sf).upper()] = spec
@@ -41,6 +49,7 @@ def _register_reply_specs() -> Dict[str, ReplyAckSpec]:
             1: "ON-LINE Not Allowed.",
             2: "Equipment Already ON-LINE.",
         },
+        success_codes=(0, 2),
     )
     add(
         ["S2F16"],
@@ -106,6 +115,7 @@ def _register_reply_specs() -> Dict[str, ReplyAckSpec]:
             5: "Rejected, already in desired condition.",
             6: "No such object exists.",
         },
+        success_codes=(0, 4),
     )
     add(
         ["S2F44"],
@@ -138,6 +148,7 @@ def _register_reply_specs() -> Dict[str, ReplyAckSpec]:
             5: "Rejected. Invalid state.",
             6: "Command performed with errors.",
         },
+        success_codes=(0, 4),
     )
     add(
         ["S5F4"],
@@ -154,6 +165,15 @@ def _register_reply_specs() -> Dict[str, ReplyAckSpec]:
             1: "Denied, busy try again later.",
             2: "Denied, spooled data does not exist.",
         },
+    )
+    add(
+        ["S16F12", "S16F16"],
+        "ACKA",
+        {
+            1: "Accepted.",
+            0: "Error.",
+        },
+        success_codes=(1,),
     )
     add(
         ["S14F2", "S14F4", "S14F6", "S14F8", "S14F10", "S14F12", "S14F14", "S14F16", "S14F18", "S14F26", "S14F28"],
@@ -191,6 +211,17 @@ def get_reply_ack_meaning(reply_sf: str, ack_code: Optional[int]) -> str:
         return f"Unknown ack code: {ack_code}"
 
     return spec.meanings.get(ack_code, spec.default_meaning)
+
+
+def is_reply_ack_accepted(reply_sf: str, ack_code: Optional[int]) -> bool:
+    """Return whether one reply ack code should be treated as success."""
+    if ack_code is None:
+        return False
+
+    spec = get_reply_ack_spec(reply_sf)
+    if not spec:
+        return ack_code == 0
+    return ack_code in set(spec.success_codes)
 
 
 def format_reply_ack(reply_sf: str, ack_code: Optional[int]) -> str:

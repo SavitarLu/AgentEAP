@@ -14,16 +14,20 @@ if [[ "${1:-}" == "--with-logs" ]]; then
   INCLUDE_LOGS=1
 fi
 
-if [[ ! -d "${DEPLOY_DIR}/lib" ]]; then
-  echo "deploy/lib not found. Run: ./deploy/bin/build_lib.sh"
-  exit 1
-fi
+echo "Step 1/4: clean deploy/lib ..."
+"${SCRIPT_DIR}/clean_lib.sh"
+
+echo "Step 2/4: rebuild deploy/lib ..."
+"${SCRIPT_DIR}/build_lib.sh"
 
 mkdir -p "${RELEASE_DIR}"
+echo "Step 3/4: clear release directory ..."
+find "${RELEASE_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
 STAGE_DIR="$(mktemp -d)"
 trap 'rm -rf "${STAGE_DIR}"' EXIT
 
+echo "Step 4/4: package release ..."
 mkdir -p "${STAGE_DIR}/deploy"
 rsync -a "${DEPLOY_DIR}/bin/" "${STAGE_DIR}/deploy/bin/" --exclude ".DS_Store"
 rsync -a "${DEPLOY_DIR}/config/" "${STAGE_DIR}/deploy/config/" --exclude ".DS_Store"
@@ -44,4 +48,4 @@ echo "Package created: ${ARCHIVE_PATH}"
 echo "Deploy steps:"
 echo "  1) tar -xzf ${ARCHIVE_NAME}"
 echo "  2) cd deploy"
-echo "  3) ./bin/start.sh EQP001"
+echo "  3) ./bin/start.sh E_CLN_01"

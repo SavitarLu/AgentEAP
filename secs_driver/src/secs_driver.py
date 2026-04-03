@@ -92,6 +92,7 @@ class SECSDriver:
         self._running = False
         self._receive_task: Optional[asyncio.Task] = None
         self._linktest_task: Optional[asyncio.Task] = None
+        self._select_watchdog_task: Optional[asyncio.Task] = None
 
         # 日志配置
         self._setup_logging()
@@ -230,6 +231,8 @@ class SECSDriver:
             except asyncio.CancelledError:
                 pass
 
+        self._cancel_select_watchdog()
+
         # 停止接收循环
         if self._receive_task:
             self._receive_task.cancel()
@@ -259,6 +262,7 @@ class SECSDriver:
     async def _on_disconnected(self) -> None:
         """连接断开回调"""
         logger.info("TCP connection lost")
+        self._cancel_select_watchdog()
         if self._state_machine:
             self._state_machine.handle_tcp_disconnected()
         self._trigger_event("on_disconnected", 0, "Connection lost")
@@ -268,11 +272,13 @@ class SECSDriver:
         logger.info(f"Client connected from {address}")
         if self._state_machine:
             self._state_machine.handle_tcp_connected()
+        self._start_select_watchdog()
         self._trigger_event("on_connected", 0)
 
     async def _on_client_disconnected(self, address: tuple) -> None:
         """客户端断开回调（被动模式）"""
         logger.info(f"Client disconnected: {address}")
+        self._cancel_select_watchdog()
         if self._state_machine:
             self._state_machine.handle_tcp_disconnected()
         self._trigger_event("on_disconnected", 0, f"Client disconnected: {address}")
@@ -289,9 +295,13 @@ class SECSDriver:
         logger.info(f"State changed: {old_state} -> {new_state}")
 
         if new_state == HSMSConnectionState.SELECTED:
+            self._cancel_select_watchdog()
             self._trigger_event("on_selected")
         elif new_state == HSMSConnectionState.NOT_SELECTED:
+            self._start_select_watchdog()
             self._trigger_event("on_deselected")
+        elif new_state == HSMSConnectionState.NOT_CONNECTED:
+            self._cancel_select_watchdog()
 
     async def _on_message_received(self, message: SECSMessage) -> None:
         """消息接收回调"""
@@ -401,6 +411,56 @@ class SECSDriver:
             logger.info("Select request sent")
         except Exception as e:
             logger.error(f"Failed to send Select request: {e}")
+
+    def _start_select_watchdog(self) -> None:
+        """
+        Passive-mode T7 safeguard:
+        If a client stays connected but not selected for too long,
+        disconnect it so that peer can reconnect cleanly.
+        """
+        if self.config.connection.mode.lower() != "passive":
+            return
+        if not isinstance(self._connection, TCPServer):
+            return
+        if not self._connection.has_client:
+            return
+        if not self._session_manager:
+            return
+        state = self._session_manager.protocol.state
+        if state == HSMSConnectionState.SELECTED:
+            return
+
+        self._cancel_select_watchdog()
+        self._select_watchdog_task = asyncio.create_task(self._select_watchdog_loop())
+
+    def _cancel_select_watchdog(self) -> None:
+        if self._select_watchdog_task:
+            self._select_watchdog_task.cancel()
+            self._select_watchdog_task = None
+
+    async def _select_watchdog_loop(self) -> None:
+        timeout = max(1.0, float(self.config.hsms.t7_timeout))
+        try:
+            await asyncio.sleep(timeout)
+            if not self._running or not self._session_manager:
+                return
+            if not isinstance(self._connection, TCPServer):
+                return
+            if not self._connection.has_client:
+                return
+
+            state = self._session_manager.protocol.state
+            if state == HSMSConnectionState.SELECTED:
+                return
+
+            logger.warning(
+                "T7 watchdog timeout in passive mode: client still not selected after %.1fs (state=%s), disconnecting client",
+                timeout,
+                state,
+            )
+            await self._connection.disconnect_client()
+        except asyncio.CancelledError:
+            pass
 
     def _trigger_event(self, method_name: str, *args, **kwargs) -> None:
         """触发事件回调"""

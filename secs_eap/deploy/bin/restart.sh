@@ -10,5 +10,5 @@ if [[ -z "${EQPID}" ]]; then
 fi
 
 "${SCRIPT_DIR}/stop.sh" "${EQPID}" || true
-sleep 1
+sleep 5
 "${SCRIPT_DIR}/start.sh" "${EQPID}"

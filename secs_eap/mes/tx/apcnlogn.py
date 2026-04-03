@@ -26,15 +26,11 @@ class APCNLOGNRequest(TxRequestMixin):
     type_id: str = "I"
     user_info: str = ""
     crr_id: str = ""
-    layer_code: str = ""
-    ppbox_id: str = ""
     eqpt_id: str = ""
     dept_code: str = ""
     sht_ope_msg: str = ""
     user_id: str = ""
     sht_cnt: str = ""
-    unmount_eqpt_id: str = ""
-    reason: str = ""
     iary: List[ApcnlogniA] = field(default_factory=list)
 
 @dataclass

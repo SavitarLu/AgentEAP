@@ -10,7 +10,7 @@
 
 ## 运行相关文件
 
-- 配置示例：`deploy/config/EQP001.yaml`
+- 配置示例：`deploy/config/E_CLN_01.yaml`
 - 运行入口：`deploy/bin/run_eap.py`
 - 打包入口：`deploy/bin/runtime_main.py`
 - 工作流原型：`deploy/bin/workflow_designer.html`

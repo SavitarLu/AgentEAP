@@ -3,7 +3,34 @@ EAP 配置定义
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
+
+
+@dataclass
+class PortConfig:
+    """单个端口配置"""
+
+    port_id: str = ""
+    port_type: str = "loader"
+    name: Optional[str] = None
+    enabled: bool = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "port_id": self.port_id,
+            "port_type": self.port_type,
+            "name": self.name,
+            "enabled": self.enabled,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PortConfig":
+        return cls(
+            port_id=str(data.get("port_id", "") or ""),
+            port_type=str(data.get("port_type", "loader") or "loader"),
+            name=data.get("name"),
+            enabled=bool(data.get("enabled", True)),
+        )
 
 
 @dataclass
@@ -11,7 +38,10 @@ class EquipmentConfig:
     """设备配置"""
 
     name: str = "EAP"
+    user_id: str = "AGT"
     device_id: int = 0
+    port_count: int = 0
+    ports: List[PortConfig] = field(default_factory=list)
     # 连接配置
     mode: str = "active"  # "active" 或 "passive"
     host: str = "127.0.0.1"
@@ -28,6 +58,81 @@ class EquipmentConfig:
     # 日志配置
     log_level: str = "INFO"
     log_file: Optional[str] = None
+
+    def get_port(self, port_id: str) -> Optional[PortConfig]:
+        """根据 port_id 查找端口配置。"""
+        target = str(port_id or "").strip()
+        if not target:
+            return None
+        for port in self.ports:
+            if str(port.port_id).strip() == target:
+                return port
+        return None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "EquipmentConfig":
+        raw_ports = data.get("ports", []) or []
+        ports: List[PortConfig] = []
+        if isinstance(raw_ports, dict):
+            for key, value in raw_ports.items():
+                if isinstance(value, PortConfig):
+                    ports.append(value)
+                    continue
+                port_data = dict(value or {})
+                port_data.setdefault("port_id", key)
+                ports.append(PortConfig.from_dict(port_data))
+        else:
+            ports = [
+                port if isinstance(port, PortConfig) else PortConfig.from_dict(port)
+                for port in raw_ports
+            ]
+        port_count = int(data.get("port_count", 0) or 0)
+        if ports and port_count <= 0:
+            port_count = len(ports)
+
+        return cls(
+            name=data.get("name", "EAP"),
+            user_id=str(data.get("user_id", "AGT") or "AGT"),
+            device_id=data.get("device_id", 0),
+            port_count=port_count,
+            ports=ports,
+            mode=data.get("mode", "active"),
+            host=data.get("host", "127.0.0.1"),
+            port=data.get("port", 5000),
+            timeout=data.get("timeout", 30.0),
+            retry_interval=data.get("retry_interval", 5.0),
+            max_retry=data.get("max_retry", 3),
+            t3_timeout=data.get("t3_timeout", 45.0),
+            t5_timeout=data.get("t5_timeout", 10.0),
+            t6_timeout=data.get("t6_timeout", 5.0),
+            t7_timeout=data.get("t7_timeout", 10.0),
+            t8_timeout=data.get("t8_timeout", 5.0),
+            log_level=data.get("log_level", "INFO"),
+            log_file=data.get("log_file"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            "name": self.name,
+            "user_id": self.user_id,
+            "device_id": self.device_id,
+            "port_count": self.port_count,
+            "ports": [port.to_dict() for port in self.ports],
+            "mode": self.mode,
+            "host": self.host,
+            "port": self.port,
+            "timeout": self.timeout,
+            "retry_interval": self.retry_interval,
+            "max_retry": self.max_retry,
+            "t3_timeout": self.t3_timeout,
+            "t5_timeout": self.t5_timeout,
+            "t6_timeout": self.t6_timeout,
+            "t7_timeout": self.t7_timeout,
+            "t8_timeout": self.t8_timeout,
+            "log_level": self.log_level,
+            "log_file": self.log_file,
+        }
 
 
 @dataclass
@@ -135,6 +240,8 @@ class BusinessLogicConfig:
     # 工艺流程配置
     default_process_sequence: List[str] = field(default_factory=list)
     process_timeout: float = 3600.0  # 1小时
+    recipe_directory: Optional[str] = None
+    allow_recipe_overwrite: bool = True
     workflow_file: Optional[str] = None
     workflows: List[Dict] = field(default_factory=list)
 
@@ -151,7 +258,12 @@ class EAPConfig:
     @classmethod
     def from_dict(cls, config: dict) -> "EAPConfig":
         """从字典创建配置"""
-        equipment_config = EquipmentConfig(**config.get("equipment", {}))
+        equipment_raw = config.get("equipment", {}) or {}
+        equipment_config = (
+            equipment_raw
+            if isinstance(equipment_raw, EquipmentConfig)
+            else EquipmentConfig.from_dict(equipment_raw)
+        )
         message_config = MessageHandlerConfig(**config.get("message_handler", {}))
         business_config = BusinessLogicConfig(**config.get("business_logic", {}))
 

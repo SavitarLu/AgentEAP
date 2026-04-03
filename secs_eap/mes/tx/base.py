@@ -88,6 +88,10 @@ class TxRequestMixin:
 class TxResponseMixin:
     """Deserialize transaction JSON payloads into dataclass responses."""
 
+    def to_payload(self) -> OrderedDict:
+        """Serialize dataclass response objects to transaction JSON payload."""
+        return OrderedDict([("transaction", _serialize_dataclass(self))])
+
     @classmethod
     def from_payload(cls, payload: Any, raw_payload: str = ""):
         root = payload.get("transaction", payload) if isinstance(payload, dict) else {}

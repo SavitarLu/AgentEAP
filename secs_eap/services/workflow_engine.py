@@ -17,8 +17,11 @@ from secs_driver.src.secs_types import SECSType
 
 from ..mes.tx.base import build_tx_dataclass
 from ..mes.tx_registry import get_tx_request_type
+from .call_method import MesReplyError
+from .common import SecsMessageCommonMixin
 from .event_report_setup import EventReportSetupBuilder
 from .reply_meanings import format_reply_ack
+from .secs_msg import SecsMessageError
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +29,16 @@ logger = logging.getLogger(__name__)
 
 class WorkflowEngine:
     """Simple YAML-driven workflow runner."""
+
+    _STEP_CONTROL_KEYS = {
+        "action",
+        "method",
+        "args",
+        "params",
+        "kwargs",
+        "save_as",
+        "on_error",
+    }
 
     def __init__(
         self,
@@ -85,44 +98,64 @@ class WorkflowEngine:
                 continue
 
             logger.info("Workflow matched: %s (trigger=%s)", workflow.get("name", "unnamed"), message.sf)
-            await self._run_steps(workflow.get("steps", []), message, context)
+            await self._run_steps(workflow.get("steps", []), message, context, variables=variables)
 
     async def _run_steps(
         self,
         steps: List[Dict[str, Any]],
         message: SECSMessage,
         context: Dict[str, Any],
-    ) -> None:
+        variables: Optional[Dict[str, Any]] = None,
+        state: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         eap_api = context.get("eap_api")
         if not eap_api:
             logger.warning("Workflow skipped: eap_api not available in context")
-            return
+            return False
 
-        variables = self._extract_variables(message, context)
-        state: Dict[str, Any] = {
+        variables = variables or self._extract_variables(message, context)
+        state = state or {
             "last_reply": None,
             "last_error": None,
             "last_mq_response": None,
         }
+        self._sync_state_variables(variables, state)
 
         for idx, step in enumerate(steps, start=1):
             action = step.get("action")
             if action == "send_message":
                 ok = await self._step_send_message(idx, step, eap_api, variables, state)
                 if not ok:
-                    break
+                    return await self._handle_step_failure(idx, step, message, context, variables, state)
+                self._sync_state_variables(variables, state)
+                continue
+
+            if action == "send_secs_msg":
+                ok = await self._step_send_secs_msg(idx, step, eap_api, variables, state)
+                if not ok:
+                    return await self._handle_step_failure(idx, step, message, context, variables, state)
+                self._sync_state_variables(variables, state)
+                continue
+
+            if action == "call_method":
+                ok = await self._step_call_method(idx, step, eap_api, variables, state)
+                if not ok:
+                    return await self._handle_step_failure(idx, step, message, context, variables, state)
+                self._sync_state_variables(variables, state)
                 continue
 
             if isinstance(action, str) and action.startswith("mes_"):
-                ok = await self._step_mes_tx(idx, step, eap_api, variables, state)
+                ok = await self._step_mes_tx(idx, step, eap_api, context, variables, state)
                 if not ok:
-                    break
+                    return await self._handle_step_failure(idx, step, message, context, variables, state)
+                self._sync_state_variables(variables, state)
                 continue
 
             if action == "configure_collection_events":
                 ok = await self._step_configure_collection_events(idx, step, eap_api, context, state)
                 if not ok:
-                    break
+                    return await self._handle_step_failure(idx, step, message, context, variables, state)
+                self._sync_state_variables(variables, state)
                 continue
 
             if action == "if_hcack":
@@ -134,17 +167,132 @@ class WorkflowEngine:
                 continue
 
             logger.warning("Unsupported workflow action at step %d: %s", idx, action)
+        self._sync_state_variables(variables, state)
+        return True
+
+    async def _handle_step_failure(
+        self,
+        idx: int,
+        step: Dict[str, Any],
+        message: SECSMessage,
+        context: Dict[str, Any],
+        variables: Dict[str, Any],
+        state: Dict[str, Any],
+    ) -> bool:
+        self._sync_state_variables(variables, state)
+        variables["error_message"] = variables.get("last_error_message", "")
+        variables["error_type"] = variables.get("last_error_type", "")
+        variables["error_reply_sf"] = variables.get("last_reply_sf", "")
+        variables["error_reply_ack"] = variables.get("last_reply_ack", "")
+        variables["error_reply_text"] = variables.get("last_reply_text", "")
+        variables["error_reply_error_text"] = variables.get("last_reply_error_text", "")
+        on_error_steps = step.get("on_error") or []
+        if not on_error_steps:
+            return False
+        if not isinstance(on_error_steps, list):
+            logger.error(
+                "Workflow step %d on_error ignored: on_error must be a list, got %s",
+                idx,
+                type(on_error_steps).__name__,
+            )
+            return False
+
+        logger.info(
+            "Workflow step %d failed, running on_error flow with %d step(s)",
+            idx,
+            len(on_error_steps),
+        )
+        await self._run_steps(
+            on_error_steps,
+            message,
+            context,
+            variables=variables,
+            state=state,
+        )
+        self._sync_state_variables(variables, state)
+        return False
+
+    @staticmethod
+    def _reply_to_text(reply: Optional[SECSMessage]) -> str:
+        if not reply:
+            return ""
+        return repr(reply)
+
+    def _extract_reply_error_text(self, reply: Optional[SECSMessage]) -> str:
+        if not reply:
+            return ""
+
+        detail_texts: List[str] = []
+        for item in (reply.items or [])[1:]:
+            detail_texts.extend(self._flatten_item_texts(item))
+        return " | ".join(text for text in detail_texts if text)
+
+    def _flatten_item_texts(self, item: Optional[SECSItem]) -> List[str]:
+        if item is None:
+            return []
+        if item.type == SECSType.LIST:
+            texts: List[str] = []
+            for child in item.children or []:
+                texts.extend(self._flatten_item_texts(child))
+            return texts
+        value = item.value
+        if value is None:
+            return []
+        if isinstance(value, bytes):
+            text = value.hex().upper()
+        else:
+            text = str(value).strip()
+        return [text] if text else []
+
+    def _sync_state_variables(
+        self,
+        variables: Dict[str, Any],
+        state: Dict[str, Any],
+    ) -> None:
+        last_error = state.get("last_error")
+        last_reply = state.get("last_reply")
+        last_mq_response = state.get("last_mq_response")
+        last_method_result = state.get("last_method_result")
+
+        variables["last_error_message"] = str(last_error or "").strip()
+        variables["last_error_type"] = type(last_error).__name__ if last_error else ""
+        variables["last_reply_sf"] = last_reply.sf if isinstance(last_reply, SECSMessage) else ""
+        ack_code = self._extract_ack_code(last_reply) if isinstance(last_reply, SECSMessage) else None
+        variables["last_reply_ack"] = "" if ack_code is None else ack_code
+        variables["last_reply_text"] = self._reply_to_text(last_reply if isinstance(last_reply, SECSMessage) else None)
+        variables["last_reply_error_text"] = ""
+
+        if isinstance(last_error, SecsMessageError):
+            reply = getattr(last_error, "reply", None)
+            if isinstance(reply, SECSMessage):
+                state["last_reply"] = reply
+                variables["last_reply_sf"] = reply.sf
+                ack_code = self._extract_ack_code(reply)
+                variables["last_reply_ack"] = "" if ack_code is None else ack_code
+                variables["last_reply_text"] = self._reply_to_text(reply)
+
+            error_text = str(getattr(last_error, "error_text", "") or "").strip()
+            variables["last_reply_error_text"] = error_text or self._extract_reply_error_text(reply)
+        elif isinstance(last_reply, SECSMessage):
+            variables["last_reply_error_text"] = self._extract_reply_error_text(last_reply)
+
+        if last_mq_response is not None:
+            variables["last_mq_response"] = last_mq_response
+        if last_method_result is not None:
+            variables["last_method_result"] = last_method_result
 
     async def _step_mes_tx(
         self,
         idx: int,
         step: Dict[str, Any],
         eap_api: Any,
+        context: Dict[str, Any],
         variables: Dict[str, Any],
         state: Dict[str, Any],
     ) -> bool:
         action = str(step.get("action") or "")
         tx = self._substitute_workflow_value(step.get("transaction", {}) or {}, variables)
+        tx = self._normalize_mes_tx_fields(tx)
         tx_name = self._resolve_mes_tx_name(action, tx)
         if not tx_name:
             state["last_error"] = RuntimeError(
@@ -158,6 +306,16 @@ class WorkflowEngine:
             state["last_error"] = RuntimeError(f"Workflow step {idx} MES TX failed: unknown tx={tx_name}")
             logger.warning("%s", state["last_error"])
             return False
+
+        if tx_name == "APCEQPST":
+            try:
+                tx = self._build_apceqpst_transaction(step, tx, context, variables)
+            except Exception as exc:
+                state["last_error"] = exc
+                logger.warning("Workflow step %d MES TX failed: %s", idx, exc)
+                return False
+
+        tx = self._apply_default_user_id(tx, context)
 
         logger.info(
             "Workflow step %d: MES MQ TX %s (%s)",
@@ -191,11 +349,95 @@ class WorkflowEngine:
                 logger.info("Workflow MES MQ reply(raw): %s", raw)
             else:
                 logger.info("Workflow MES MQ reply: %s", resp)
+
+            if tx_name == "APVRYOPE":
+                port_context_store = context.get("port_context_store")
+                if port_context_store:
+                    try:
+                        record = port_context_store.capture_apvryope(request, resp)
+                        logger.info(
+                            "Port context captured: eqpt_id=%s port_id=%s carrier_id=%s lot_id=%s recipe_id=%s",
+                            record.eqpt_id,
+                            record.port_id,
+                            record.carrier_id,
+                            record.lot_id,
+                            record.recipe_id,
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to capture APVRYOPE port context: %s", exc)
             return True
         except Exception as exc:
             state["last_error"] = exc
             logger.warning("Workflow step %d MES MQ failed: %s", idx, exc)
             return False
+
+    def _build_apceqpst_transaction(
+        self,
+        step: Dict[str, Any],
+        tx: Dict[str, Any],
+        context: Dict[str, Any],
+        variables: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Normalize the fixed APCEQPST payload so YAML can stay compact."""
+        merged: Dict[str, Any] = dict(tx or {})
+        step_tx = step.get("transaction") if isinstance(step.get("transaction"), dict) else {}
+
+        def _pick(key: str) -> Any:
+            if key in merged and merged.get(key) not in (None, ""):
+                return merged.get(key)
+            if key in step_tx and step_tx.get(key) not in (None, ""):
+                return self._substitute_workflow_value(step_tx.get(key), variables)
+            if key in step and step.get(key) not in (None, ""):
+                return self._substitute_workflow_value(step.get(key), variables)
+            return None
+
+        eqpt_mode = str(_pick("eqpt_mode") or "").strip().upper()
+        if eqpt_mode not in {"AUTO", "MANU"}:
+            raise RuntimeError(
+                "Workflow step APCEQPST requires eqpt_mode=AUTO or eqpt_mode=MANU"
+            )
+
+        eqpt_id = str(
+            _pick("eqpt_id")
+            or context.get("equipment_id")
+            or context.get("mes_equipment_id")
+            or ""
+        ).strip()
+        if not eqpt_id:
+            raise RuntimeError("Workflow step APCEQPST requires an equipment id")
+
+        merged.update(
+            {
+                "trx_id": "APCEQPST",
+                "type_id": "I",
+                "eqpt_id": eqpt_id,
+                "eqpt_mode": eqpt_mode,
+                "user_id": str(_pick("user_id") or "").strip(),
+                "orig_opi_flg": str(_pick("orig_opi_flg") or "N").strip() or "N",
+                "clm_eqst_typ": str(_pick("clm_eqst_typ") or "A").strip() or "A",
+                "eqpt_stat": "" if _pick("eqpt_stat") is None else str(_pick("eqpt_stat")),
+            }
+        )
+        return merged
+
+    def _apply_default_user_id(self, tx: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(tx, dict):
+            return tx
+
+        if str(tx.get("user_id", "") or "").strip():
+            return tx
+
+        default_user_id = str(
+            context.get("equipment_user_id")
+            or context.get("user_id")
+            or ""
+        ).strip()
+        if not default_user_id:
+            return tx
+
+        merged = dict(tx)
+        merged["user_id"] = default_user_id
+        return merged
 
     def _build_mes_tx_request(self, tx_name: str, request_type: Any, tx: Dict[str, Any]) -> Any:
         try:
@@ -237,6 +479,28 @@ class WorkflowEngine:
         if normalized_action.startswith("mes_") and normalized_action != "mes_tx":
             return normalized_action[4:].upper()
         return ""
+
+    def _normalize_mes_port_id(self, value: Any) -> Any:
+        if value is None:
+            return value
+        text = str(value).strip()
+        if text.isdigit():
+            return str(int(text)).zfill(2)
+        return value
+
+    def _normalize_mes_tx_fields(self, value: Any) -> Any:
+        if isinstance(value, list):
+            return [self._normalize_mes_tx_fields(item) for item in value]
+        if isinstance(value, dict):
+            normalized: Dict[str, Any] = {}
+            for key, item in value.items():
+                normalized_item = self._normalize_mes_tx_fields(item)
+                key_text = str(key or "").strip().lower()
+                if key_text in {"port_id", "eqp_port_id", "logof_port_id"}:
+                    normalized_item = self._normalize_mes_port_id(normalized_item)
+                normalized[key] = normalized_item
+            return normalized
+        return value
 
     def _format_mes_tx_fields(self, tx: Dict[str, Any]) -> str:
         parts = []
@@ -395,6 +659,246 @@ class WorkflowEngine:
                     return False
         return False
 
+    async def _step_call_method(
+        self,
+        idx: int,
+        step: Dict[str, Any],
+        eap_api: Any,
+        variables: Dict[str, Any],
+        state: Dict[str, Any],
+    ) -> bool:
+        method_name = str(step.get("method", "") or "").strip()
+        if not method_name:
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} call_method failed: missing method"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+        if method_name.startswith("_"):
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} call_method failed: private method is not allowed ({method_name})"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+
+        method_owner = None
+        method = None
+        method_candidates: List[str] = []
+        for candidate_name in (
+            method_name,
+            str(method_name or "").strip().lower(),
+        ):
+            normalized_name = str(candidate_name or "").strip()
+            if normalized_name and normalized_name not in method_candidates:
+                method_candidates.append(normalized_name)
+
+        for candidate in (
+            getattr(eap_api, "call_method_service", None),
+            eap_api,
+        ):
+            if candidate is None:
+                continue
+            for candidate_name in method_candidates:
+                current = getattr(candidate, candidate_name, None)
+                if callable(current):
+                    method_owner = candidate
+                    method = current
+                    break
+            if callable(method):
+                break
+        if not callable(method):
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} call_method failed: unknown method={method_name}"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+
+        raw_args = step.get("args", []) or []
+        if not isinstance(raw_args, (list, tuple)):
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} call_method failed: args must be a list"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+
+        raw_params = step.get("params", step.get("kwargs"))
+        if raw_params is None:
+            raw_params = {
+                key: value
+                for key, value in step.items()
+                if key not in self._STEP_CONTROL_KEYS
+            }
+        if not isinstance(raw_params, dict):
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} call_method failed: params must be a mapping"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+
+        args = self._substitute_workflow_value(list(raw_args), variables)
+        params = self._substitute_workflow_value(dict(raw_params), variables)
+
+        logger.info(
+            "Workflow step %d: call method %s via %s args=%s kwargs=%s",
+            idx,
+            method_name,
+            type(method_owner).__name__ if method_owner is not None else "unknown",
+            args,
+            params,
+        )
+
+        try:
+            result = method(*args, **params)
+            if asyncio.iscoroutine(result):
+                result = await result
+
+            state["last_method_result"] = result
+            if isinstance(result, SECSMessage):
+                state["last_reply"] = result
+            state["last_error"] = None
+
+            save_as = str(step.get("save_as", "") or "").strip()
+            if save_as:
+                state[save_as] = result
+                variables[save_as] = result
+            return True
+        except Exception as exc:
+            state["last_error"] = exc
+            if isinstance(exc, (MesReplyError, SecsMessageError)):
+                logger.error(
+                    "Workflow step %d call_method %s failed: %s",
+                    idx,
+                    method_name,
+                    exc,
+                )
+            else:
+                logger.error(
+                    "Workflow step %d call_method %s failed: %s",
+                    idx,
+                    method_name,
+                    exc,
+                    exc_info=True,
+                )
+            return False
+
+    async def _step_send_secs_msg(
+        self,
+        idx: int,
+        step: Dict[str, Any],
+        eap_api: Any,
+        variables: Dict[str, Any],
+        state: Dict[str, Any],
+    ) -> bool:
+        secs_msg_service = getattr(eap_api, "secs_msg_service", None)
+        if secs_msg_service is None:
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} send_secs_msg failed: secs_msg_service not available"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+
+        method_name = str(step.get("method", "") or "").strip()
+        if method_name.startswith("_"):
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} send_secs_msg failed: private method is not allowed ({method_name})"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+
+        raw_args = step.get("args", []) or []
+        if not isinstance(raw_args, (list, tuple)):
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} send_secs_msg failed: args must be a list"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+
+        raw_params = step.get("params", step.get("kwargs"))
+        if raw_params is None:
+            raw_params = {
+                key: value
+                for key, value in step.items()
+                if key not in self._STEP_CONTROL_KEYS
+            }
+        if not isinstance(raw_params, dict):
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} send_secs_msg failed: params must be a mapping"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+
+        args = self._substitute_workflow_value(list(raw_args), variables)
+        params = self._substitute_workflow_value(dict(raw_params), variables)
+
+        method = None
+        if method_name:
+            method = getattr(secs_msg_service, method_name, None)
+            if not callable(method):
+                state["last_error"] = RuntimeError(
+                    f"Workflow step {idx} send_secs_msg failed: unknown method={method_name}"
+                )
+                logger.error("%s", state["last_error"])
+                return False
+        elif "template_name" in params:
+            method_name = "send_secs_template"
+            method = getattr(secs_msg_service, method_name)
+        elif "script" in params:
+            method_name = "send_secs_script"
+            method = getattr(secs_msg_service, method_name)
+        else:
+            state["last_error"] = RuntimeError(
+                f"Workflow step {idx} send_secs_msg failed: missing method/template_name/script"
+            )
+            logger.error("%s", state["last_error"])
+            return False
+
+        logger.info(
+            "Workflow step %d: send secs msg %s via %s args=%s kwargs=%s",
+            idx,
+            method_name,
+            type(secs_msg_service).__name__,
+            args,
+            params,
+        )
+
+        try:
+            result = method(*args, **params)
+            if asyncio.iscoroutine(result):
+                result = await result
+
+            state["last_method_result"] = result
+            if isinstance(result, SECSMessage):
+                state["last_reply"] = result
+            elif isinstance(result, dict):
+                reply = result.get("reply")
+                if isinstance(reply, SECSMessage):
+                    state["last_reply"] = reply
+            state["last_error"] = None
+
+            save_as = str(step.get("save_as", "") or "").strip()
+            if save_as:
+                state[save_as] = result
+                variables[save_as] = result
+            return True
+        except Exception as exc:
+            state["last_error"] = exc
+            if isinstance(exc, SecsMessageError):
+                logger.error(
+                    "Workflow step %d send_secs_msg %s failed: %s",
+                    idx,
+                    method_name,
+                    exc,
+                )
+            else:
+                logger.error(
+                    "Workflow step %d send_secs_msg %s failed: %s",
+                    idx,
+                    method_name,
+                    exc,
+                    exc_info=True,
+                )
+            return False
+
     async def _step_if_hcack(
         self,
         step: Dict[str, Any],
@@ -413,9 +917,9 @@ class WorkflowEngine:
         logger.info("Workflow if_hcack: actual=%s expected=%s matched=%s", actual, expected, matched)
 
         if matched:
-            await self._run_steps(then_steps, message, context)
+            await self._run_steps(then_steps, message, context, variables=variables, state=state)
         else:
-            await self._run_steps(else_steps, message, context)
+            await self._run_steps(else_steps, message, context, variables=variables, state=state)
 
     def _step_wait_reply(self, idx: int, step: Dict[str, Any], state: Dict[str, Any]) -> None:
         expected_sf = step.get("expect_sf")
@@ -443,22 +947,7 @@ class WorkflowEngine:
         return None
 
     def _extract_ack_code(self, reply: Optional[SECSMessage]) -> Optional[int]:
-        if not reply or not reply.items:
-            return None
-        first = reply.items[0]
-        value = first.value
-        try:
-            if first.type == SECSType.BOOLEAN:
-                return 1 if bool(value) else 0
-            if isinstance(value, bytes):
-                return value[0] if value else 0
-            if isinstance(value, bool):
-                return 1 if value else 0
-            if value is not None:
-                return int(value)
-        except Exception:
-            return None
-        return None
+        return SecsMessageCommonMixin._extract_ack_code(reply)
 
     def _extract_variables(
         self,
@@ -467,6 +956,10 @@ class WorkflowEngine:
     ) -> Dict[str, Any]:
         vars_: Dict[str, Any] = {"sf": message.sf}
         context = context or {}
+        for key in ("equipment_id", "mes_equipment_id", "equipment_user_id"):
+            value = context.get(key)
+            if value not in (None, ""):
+                vars_[key] = value
         collection_event = context.get("collection_event")
         if isinstance(collection_event, dict):
             vars_["data_id"] = collection_event.get("data_id")

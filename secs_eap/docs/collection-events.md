@@ -103,10 +103,10 @@ trigger:
   ceid: 214
 
 steps:
-  - action: "mes_apvryope"
-    transaction:
-      port_id: "${lp_id}"
-      crr_id: "${carrier_id}"
+  - action: "call_method"
+    method: "inquiry_proc_start"
+    port_id: "${lp_id}"
+    carrier_id: "${carrier_id}"
 ```
 
 ## Online Remote 自动下发 S2Fx

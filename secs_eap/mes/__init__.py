@@ -3,7 +3,7 @@ MES MQ integration modules.
 """
 
 from .tx import APVRYOPERequest, APVRYOPEResponse
-from .mq_service import MesMqConfig, MesMqService
+from .mq_service import InboundMesTxMessage, MesMqConfig, MesMqService
 from .tx_registry import (
     TxRoute,
     TX_ROUTES,
@@ -18,6 +18,7 @@ from .tx_registry import (
 __all__ = [
     "APVRYOPERequest",
     "APVRYOPEResponse",
+    "InboundMesTxMessage",
     "MesMqConfig",
     "MesMqService",
     "TxRoute",

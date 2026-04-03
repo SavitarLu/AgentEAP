@@ -153,6 +153,8 @@ class MessageDispatcher:
                 if workflow_engine:
                     await workflow_engine.handle_message(message, self._context)
 
+                self._clear_port_context_on_offline_event(message)
+
                 self._invoke_callback(self._on_message_handled, message, result)
             else:
                 # 处理失败
@@ -201,6 +203,39 @@ class MessageDispatcher:
             是否发送成功
         """
         return await self._driver_adapter.send_reply(original_message, items)
+
+    def _clear_port_context_on_offline_event(self, message: SECSMessage) -> None:
+        """Clear in-memory port contexts after an offline collection event."""
+        if message.sf != "S6F11":
+            return
+
+        event = self._context.get("last_collection_event") or self._context.get("collection_event")
+        if not isinstance(event, dict):
+            return
+
+        event_name = str(event.get("name", "") or "").strip().lower()
+        if event_name != "offline":
+            return
+
+        port_context_store = self._context.get("port_context_store")
+        if not port_context_store:
+            return
+
+        eqpt_id = str(
+            self._context.get("mes_equipment_id")
+            or self._context.get("equipment_id")
+            or ""
+        ).strip()
+
+        try:
+            cleared = port_context_store.clear_equipment(eqpt_id=eqpt_id, reason="offline")
+            logger.info(
+                "Cleared %d port context(s) on offline event for eqpt_id=%s",
+                len(cleared),
+                eqpt_id or "<all>",
+            )
+        except Exception as exc:
+            logger.error("Failed to clear port contexts on offline event: %s", exc)
 
     def _on_error(self, error: Exception) -> None:
         """错误回调"""

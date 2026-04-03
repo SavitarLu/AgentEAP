@@ -45,7 +45,7 @@ python3 -m secs_eap.eap --host 127.0.0.1 --port 5000 --mode active --device-id 0
 按设备配置启动：
 
 ```bash
-python3 secs_eap/deploy/bin/run_eap.py EQP001
+python3 secs_eap/deploy/bin/run_eap.py E_CLN_01
 ```
 
 常用参数：
@@ -62,6 +62,10 @@ python3 secs_eap/deploy/bin/run_eap.py EQP001
 - [消息处理开发指南](docs/handler-development.md)
 - [S6F11 Collection Event 配置](docs/collection-events.md)
 - [MES APVRYOPE 接入说明](docs/mes-apvryope.md)
+
+## 新增流程
+
+- MQ 共享队列收到 `RPLRPTCS` 后，EAP 会自动向设备发送 `S7F19` 查询 Recipe ID list，并回传 `RPLRPTCS` 响应
 
 ## 常见问题
 
