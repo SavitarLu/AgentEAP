@@ -107,11 +107,11 @@ business_logic:
         name: slot_map_verification_ok
         reports: [8703]
       125:
-        name: control_job_executing
+        name: control_job_started
         reports: [9401]
-      602:
-        name: process_job_processing
-        reports: [4001]
+      126:
+        name: control_job_ended
+        reports: [9401]
 
   workflows:
     - name: "online_local_offline"

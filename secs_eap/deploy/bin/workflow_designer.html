@@ -2,267 +2,2467 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SECS Workflow Designer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Workflow Designer</title>
   <style>
-    body { font-family: -apple-system, Arial, sans-serif; margin: 0; background: #f5f6f8; }
-    .wrap { display: grid; grid-template-columns: 280px 1fr 440px; gap: 12px; padding: 12px; height: 100vh; box-sizing: border-box; }
-    .panel { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px; overflow: auto; }
-    h3 { margin: 0 0 8px 0; font-size: 15px; }
-    .node { border: 1px solid #666; border-radius: 6px; padding: 8px; margin: 8px 0; background: #fafafa; cursor: grab; }
-    .canvas { min-height: 180px; border: 2px dashed #999; border-radius: 8px; padding: 10px; background: #fcfcff; }
-    .canvas .node { cursor: default; border-color: #3b82f6; background: #eef4ff; }
-    .row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; margin: 6px 0; }
-    input { width: 100%; box-sizing: border-box; padding: 6px; }
-    button { margin-right: 8px; padding: 6px 10px; }
-    textarea { width: 100%; height: 36vh; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .hint { color: #666; font-size: 12px; }
+    :root {
+      --bg: linear-gradient(135deg, #f5f0e8 0%, #e9eef5 55%, #f8fafc 100%);
+      --panel: rgba(255, 255, 255, 0.88);
+      --panel-strong: rgba(255, 255, 255, 0.96);
+      --line: #d7d3cc;
+      --line-strong: #a78b6d;
+      --ink: #1f2937;
+      --muted: #667085;
+      --accent: #b45309;
+      --accent-soft: #f59e0b;
+      --accent-wash: rgba(245, 158, 11, 0.12);
+      --blue: #1d4ed8;
+      --blue-wash: rgba(29, 78, 216, 0.1);
+      --green: #0f766e;
+      --green-wash: rgba(15, 118, 110, 0.12);
+      --shadow: 0 18px 50px rgba(28, 37, 54, 0.14);
+      --radius: 20px;
+      --radius-sm: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      z-index: -1;
+      border-radius: 999px;
+      filter: blur(10px);
+      opacity: 0.5;
+    }
+
+    body::before {
+      width: 320px;
+      height: 320px;
+      top: -80px;
+      left: -120px;
+      background: radial-gradient(circle, rgba(180, 83, 9, 0.28) 0%, rgba(180, 83, 9, 0) 72%);
+    }
+
+    body::after {
+      width: 420px;
+      height: 420px;
+      right: -180px;
+      bottom: -120px;
+      background: radial-gradient(circle, rgba(29, 78, 216, 0.22) 0%, rgba(29, 78, 216, 0) 72%);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 340px minmax(520px, 1fr) 440px;
+      gap: 16px;
+      min-height: 100vh;
+      padding: 18px;
+    }
+
+    .column {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(167, 139, 109, 0.22);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .panel-head {
+      padding: 16px 18px 10px;
+      border-bottom: 1px solid rgba(215, 211, 204, 0.72);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.22));
+    }
+
+    .panel-body {
+      padding: 16px 18px 18px;
+    }
+
+    .hero {
+      padding: 18px;
+      background:
+        linear-gradient(135deg, rgba(180, 83, 9, 0.95) 0%, rgba(150, 47, 0, 0.93) 46%, rgba(29, 78, 216, 0.9) 100%);
+      color: #fff;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.05;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      letter-spacing: 0.01em;
+    }
+
+    .hero p {
+      margin: 10px 0 0;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    h2,
+    h3,
+    h4 {
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    h2 {
+      font-size: 16px;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    }
+
+    h3 {
+      font-size: 14px;
+    }
+
+    .subtle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .field label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #5b6472;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+      font: inherit;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--panel-strong);
+      color: var(--ink);
+      padding: 11px 12px;
+      outline: none;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--accent-soft);
+      box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.14);
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      line-height: 1.55;
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      background: linear-gradient(135deg, #ffffff, #f6ede0);
+      color: var(--ink);
+      box-shadow: inset 0 0 0 1px rgba(167, 139, 109, 0.35);
+      transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: inset 0 0 0 1px rgba(167, 139, 109, 0.55), 0 10px 24px rgba(28, 37, 54, 0.08);
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, #b45309, #ea580c);
+      color: #fff;
+      box-shadow: none;
+    }
+
+    .btn.secondary {
+      background: linear-gradient(135deg, #1d4ed8, #2563eb);
+      color: #fff;
+      box-shadow: none;
+    }
+
+    .btn.ghost {
+      background: transparent;
+      box-shadow: inset 0 0 0 1px rgba(103, 112, 123, 0.3);
+    }
+
+    .status-list,
+    .chip-list,
+    .method-list,
+    .event-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .status-item,
+    .event-card,
+    .method-card,
+    .helper-box,
+    .canvas-empty {
+      border: 1px solid rgba(215, 211, 204, 0.86);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.78);
+      padding: 12px 14px;
+    }
+
+    .status-item strong,
+    .event-card strong,
+    .method-card strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .status-item .meta,
+    .event-card .meta,
+    .method-card .meta {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .palette-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .palette-item {
+      border: 1px solid rgba(167, 139, 109, 0.4);
+      border-radius: 18px;
+      padding: 12px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 246, 233, 0.9));
+      cursor: grab;
+      transition: transform 0.16s ease, border-color 0.16s ease;
+    }
+
+    .palette-item:hover {
+      transform: translateY(-1px);
+      border-color: var(--accent-soft);
+    }
+
+    .palette-item strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .palette-item span {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .canvas-shell {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .canvas {
+      min-height: 240px;
+      border: 2px dashed rgba(167, 139, 109, 0.45);
+      border-radius: 26px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.95)),
+        radial-gradient(circle at top left, rgba(245, 158, 11, 0.08), transparent 42%);
+      padding: 14px;
+      overflow: auto;
+    }
+
+    .node-card {
+      border: 1px solid rgba(29, 78, 216, 0.16);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(244, 247, 255, 0.98), rgba(255, 255, 255, 0.95));
+      margin-bottom: 14px;
+      overflow: hidden;
+      box-shadow: 0 14px 30px rgba(29, 78, 216, 0.08);
+    }
+
+    .node-card:last-child {
+      margin-bottom: 0;
+    }
+
+    .node-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      background: linear-gradient(180deg, rgba(230, 238, 252, 0.95), rgba(248, 250, 252, 0.84));
+      border-bottom: 1px solid rgba(29, 78, 216, 0.1);
+    }
+
+    .node-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 76px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--blue-wash);
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .node-title {
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .node-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .icon-btn {
+      border: 0;
+      border-radius: 12px;
+      min-width: 34px;
+      height: 34px;
+      padding: 0 10px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--ink);
+      box-shadow: inset 0 0 0 1px rgba(167, 139, 109, 0.22);
+    }
+
+    .icon-btn:hover {
+      background: #fff7ed;
+    }
+
+    .node-body {
+      padding: 14px;
+    }
+
+    .helper-box {
+      margin-top: 10px;
+      background: rgba(255, 248, 235, 0.92);
+    }
+
+    .helper-title {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #92400e;
+      margin-bottom: 8px;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      border: 0;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(180, 83, 9, 0.1);
+      color: #92400e;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .chip.passive {
+      cursor: default;
+      background: rgba(29, 78, 216, 0.08);
+      color: var(--blue);
+    }
+
+    .chip.success {
+      background: var(--green-wash);
+      color: var(--green);
+    }
+
+    .param-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .param-row {
+      display: grid;
+      grid-template-columns: 130px 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .param-key {
+      font-size: 12px;
+      font-weight: 700;
+      color: #4b5563;
+      background: rgba(29, 78, 216, 0.06);
+      border-radius: 12px;
+      padding: 10px 12px;
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+    }
+
+    .param-row.extra {
+      grid-template-columns: 120px 1fr auto;
+    }
+
+    .signature {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--muted);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+    }
+
+    .code-box {
+      min-height: 220px;
+    }
+
+    .code-box textarea {
+      min-height: 220px;
+    }
+
+    .canvas-empty {
+      min-height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--muted);
+      border-style: dashed;
+    }
+
+    .event-card {
+      cursor: pointer;
+      transition: transform 0.16s ease, border-color 0.16s ease;
+    }
+
+    .event-card:hover {
+      transform: translateY(-1px);
+      border-color: rgba(29, 78, 216, 0.32);
+    }
+
+    .event-card.active {
+      border-color: rgba(29, 78, 216, 0.55);
+      box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.08);
+    }
+
+    .workflow-card {
+      cursor: pointer;
+      transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .workflow-card:hover {
+      transform: translateY(-1px);
+      border-color: rgba(180, 83, 9, 0.42);
+    }
+
+    .workflow-card.active {
+      border-color: rgba(180, 83, 9, 0.62);
+      box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+    }
+
+    .tree {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .tree-block {
+      border-left: 3px solid rgba(29, 78, 216, 0.18);
+      padding-left: 10px;
+    }
+
+    .mono {
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+
+    .helper-note {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(29, 78, 216, 0.06);
+      color: #1e40af;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .pill-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .small {
+      font-size: 12px;
+    }
+
+    @media (max-width: 1440px) {
+      .app {
+        grid-template-columns: 320px minmax(420px, 1fr) 400px;
+      }
+    }
+
+    @media (max-width: 1180px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="panel">
-      <h3>Palette</h3>
-      <div class="hint">Drag nodes to canvas</div>
-      <div class="node" draggable="true" data-type="trigger">Trigger (SxFy)</div>
-      <div class="node" draggable="true" data-type="send_message">Send Message</div>
-      <div class="node" draggable="true" data-type="wait_reply">Wait Reply</div>
-      <div class="node" draggable="true" data-type="if_hcack">If HCACK == N</div>
+  <div class="app">
+    <div class="column">
+      <div class="panel">
+        <div class="hero">
+          <h1>Workflow Designer</h1>
+          <p>
+            Load real project metadata from <span class="mono">call_method.py</span>,
+            <span class="mono">common.py</span>, <span class="mono">secs_msg.py</span>,
+            and YAML collection events so workflow steps can be configured against the
+            actual codebase instead of hardcoded dropdowns.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Project Sources</h2>
+          <div class="subtle">
+            Auto-load tries nearby files relative to this HTML. If the browser blocks local fetch,
+            use the manual file pickers.
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="button-row">
+            <button class="btn primary" id="btnAutoLoad">Auto Load Nearby Files</button>
+            <button class="btn secondary" id="btnLoadSelected">Load Selected Files</button>
+          </div>
+
+          <div class="grid-two" style="margin-top: 14px;">
+            <div class="field">
+              <label for="callMethodFile">call_method.py</label>
+              <input id="callMethodFile" type="file" accept=".py,text/x-python" />
+            </div>
+            <div class="field">
+              <label for="commonFile">common.py</label>
+              <input id="commonFile" type="file" accept=".py,text/x-python" />
+            </div>
+            <div class="field">
+              <label for="secsMsgFile">secs_msg.py</label>
+              <input id="secsMsgFile" type="file" accept=".py,text/x-python" />
+            </div>
+            <div class="field">
+              <label for="yamlFile">Workflow YAML</label>
+              <input id="yamlFile" type="file" accept=".yaml,.yml,text/yaml" />
+            </div>
+          </div>
+
+          <div class="status-list" id="sourceStatus"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Palette</h2>
+          <div class="subtle">Drag or click to add real workflow steps.</div>
+        </div>
+        <div class="panel-body">
+          <div class="palette-grid" id="palette"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="min-height: 0;">
+        <div class="panel-head">
+          <h2>Loaded Methods</h2>
+          <div class="subtle">
+            Call methods come from <span class="mono">call_method.py</span> and public uppercase
+            helpers in <span class="mono">common.py</span>. SECS methods come from
+            <span class="mono">secs_msg.py</span>.
+          </div>
+        </div>
+        <div class="panel-body" style="overflow: auto;">
+          <div class="method-list" id="methodSummary"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="min-height: 0;">
+        <div class="panel-head">
+          <h2>Existing Workflows</h2>
+          <div class="subtle">
+            Read from the loaded YAML <span class="mono">business_logic.workflows</span>.
+            Click any card to restore that workflow into the canvas and YAML input box.
+          </div>
+        </div>
+        <div class="panel-body" style="overflow: auto;">
+          <div class="method-list" id="workflowLibrary"></div>
+        </div>
+      </div>
     </div>
 
-    <div class="panel">
-      <h3>Canvas</h3>
-      <div id="canvas" class="canvas"></div>
-      <div style="margin-top:10px;">
-        <button id="btnExport">Export YAML Snippet</button>
-        <button id="btnImport">Import YAML</button>
-        <button id="btnClear">Clear</button>
-      </div>
-      <div class="hint" style="margin-top:8px;">
-        Recommended order: Trigger -> Send Message -> Wait Reply / If HCACK
+    <div class="column">
+      <div class="panel" style="flex: 1; min-height: 0;">
+        <div class="panel-head">
+          <h2>Canvas</h2>
+          <div class="subtle">
+            Recommended flow: Trigger -> Call Method / Send SECS -> Wait Reply / If HCACK.
+            Nested <span class="mono">on_error</span> is supported as raw YAML per node so advanced
+            behavior is not lost.
+          </div>
+        </div>
+        <div class="panel-body canvas-shell">
+          <div class="button-row">
+            <button class="btn primary" id="btnAddTrigger">Add Trigger</button>
+            <button class="btn ghost" id="btnExport">Export YAML Snippet</button>
+            <button class="btn ghost" id="btnImport">Import YAML</button>
+            <button class="btn ghost" id="btnClear">Clear</button>
+          </div>
+          <div id="canvas" class="canvas"></div>
+        </div>
       </div>
     </div>
 
-    <div class="panel">
-      <h3>YAML IO</h3>
-      <div class="hint">Input (for Import)</div>
-      <textarea id="input"></textarea>
-      <div class="hint" style="margin-top:6px;">Output (paste into <code>business_logic.workflows</code>)</div>
-      <textarea id="output" readonly></textarea>
+    <div class="column">
+      <div class="panel" style="flex: 1; min-height: 0;">
+        <div class="panel-head">
+          <h2>Event / VID Relation</h2>
+          <div class="subtle">
+            This section visualizes <span class="mono">event -> report -> vid -> variable name</span>
+            from the loaded YAML. Clicking an event fills the first trigger node if it exists.
+          </div>
+        </div>
+        <div class="panel-body" style="overflow: auto;">
+          <div class="event-list" id="eventMap"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>YAML IO</h2>
+          <div class="subtle">
+            Import focuses on common project workflow shapes. Export emits a snippet that can be
+            pasted into <span class="mono">business_logic.workflows</span>.
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="field">
+            <label for="inputYaml">Input</label>
+            <textarea id="inputYaml" class="code-box" placeholder="- name: &quot;carrier_waiting_for_host&quot; ..."></textarea>
+          </div>
+          <div class="field" style="margin-bottom: 0;">
+            <label for="outputYaml">Output</label>
+            <textarea id="outputYaml" class="code-box" readonly></textarea>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
-    const canvas = document.getElementById("canvas");
-    const input = document.getElementById("input");
-    const output = document.getElementById("output");
+    const DEFAULT_SOURCE_PATHS = {
+      callMethod: "../../services/call_method.py",
+      common: "../../services/common.py",
+      secsMsg: "../../services/secs_msg.py",
+      yaml: "../config/E_CLN_01.yaml",
+    };
 
-    document.querySelectorAll(".node[draggable=true]").forEach(el => {
-      el.addEventListener("dragstart", e => {
-        e.dataTransfer.setData("node-type", el.dataset.type);
-      });
-    });
+    const PALETTE_ITEMS = [
+      {
+        type: "trigger",
+        title: "Trigger",
+        hint: "Bind workflow to real event names and available VID variables.",
+      },
+      {
+        type: "call_method",
+        title: "Call Method",
+        hint: "Choose methods directly from call_method/common metadata.",
+      },
+      {
+        type: "send_secs_msg",
+        title: "Send SECS",
+        hint: "Choose SxFx methods from secs_msg metadata.",
+      },
+      {
+        type: "configure_collection_events",
+        title: "Configure Events",
+        hint: "Add configure_collection_events without memorizing YAML keys.",
+      },
+      {
+        type: "wait_reply",
+        title: "Wait Reply",
+        hint: "Explicit reply gate for legacy send_message flows.",
+      },
+      {
+        type: "if_hcack",
+        title: "If HCACK",
+        hint: "Branch by HCACK when command replies are command-style.",
+      },
+    ];
 
-    canvas.addEventListener("dragover", e => e.preventDefault());
-    canvas.addEventListener("drop", e => {
-      e.preventDefault();
-      const type = e.dataTransfer.getData("node-type");
-      if (!type) return;
-      canvas.appendChild(createNode(type));
-    });
+    const COMMON_TRIGGER_VARIABLES = [
+      "sf",
+      "data_id",
+      "ceid",
+      "event_name",
+      "rptid",
+      "rptids",
+      "equipment_id",
+      "mes_equipment_id",
+      "equipment_user_id",
+      "last_error_message",
+      "last_error_type",
+      "last_reply_sf",
+      "last_reply_ack",
+      "last_reply_text",
+      "last_reply_error_text",
+      "last_method_result",
+      "last_mq_response",
+    ];
 
-    function createInput(label, value = "") {
-      const row = document.createElement("div");
-      row.className = "row";
-      const l = document.createElement("label");
-      l.textContent = label;
-      const inp = document.createElement("input");
-      inp.value = value;
-      row.appendChild(l);
-      row.appendChild(inp);
-      return { row, inp };
+    const state = {
+      metadata: {
+        callMethods: [],
+        secsMethods: [],
+        yaml: {
+          variables: {},
+          reports: {},
+          events: {},
+          workflows: [],
+        },
+        sourceSummary: {},
+      },
+      nodes: [],
+      nextNodeId: 1,
+      lastFocusedInput: null,
+    };
+
+    const canvasEl = document.getElementById("canvas");
+    const inputYamlEl = document.getElementById("inputYaml");
+    const outputYamlEl = document.getElementById("outputYaml");
+    const sourceStatusEl = document.getElementById("sourceStatus");
+    const methodSummaryEl = document.getElementById("methodSummary");
+    const eventMapEl = document.getElementById("eventMap");
+    const paletteEl = document.getElementById("palette");
+    const workflowLibraryEl = document.getElementById("workflowLibrary");
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
     }
 
-    function createNode(type) {
-      const node = document.createElement("div");
-      node.className = "node";
-      node.dataset.type = type;
-      const title = document.createElement("strong");
-      title.textContent = type;
-      node.appendChild(title);
+    function stripQuotes(value) {
+      const text = String(value || "").trim();
+      if (
+        (text.startsWith("\"") && text.endsWith("\"")) ||
+        (text.startsWith("'") && text.endsWith("'"))
+      ) {
+        return text.slice(1, -1);
+      }
+      return text;
+    }
 
-      if (type === "trigger") {
-        const sf = createInput("sf", "S6F11");
-        sf.inp.dataset.key = "sf";
-        node.appendChild(sf.row);
-      } else if (type === "send_message") {
-        const stream = createInput("stream", "2");
-        stream.inp.dataset.key = "stream";
-        const func = createInput("function", "41");
-        func.inp.dataset.key = "function";
-        const wait = createInput("wait_reply", "true");
-        wait.inp.dataset.key = "wait_reply";
-        const retries = createInput("retries", "0");
-        retries.inp.dataset.key = "retries";
-        const cmd = createInput("rcmd", "START");
-        cmd.inp.dataset.key = "rcmd";
-        node.appendChild(stream.row);
-        node.appendChild(func.row);
-        node.appendChild(wait.row);
-        node.appendChild(retries.row);
-        node.appendChild(cmd.row);
-      } else if (type === "wait_reply") {
-        const sf = createInput("expect_sf", "S2F42");
-        sf.inp.dataset.key = "expect_sf";
-        const timeout = createInput("timeout", "5");
-        timeout.inp.dataset.key = "timeout";
-        node.appendChild(sf.row);
-        node.appendChild(timeout.row);
-      } else if (type === "if_hcack") {
-        const equals = createInput("equals", "0");
-        equals.inp.dataset.key = "equals";
-        node.appendChild(equals.row);
+    function parseInlineList(raw) {
+      const text = String(raw || "").trim();
+      if (!text.startsWith("[") || !text.endsWith("]")) {
+        return [];
+      }
+      const inner = text.slice(1, -1).trim();
+      if (!inner) return [];
+      return inner
+        .split(",")
+        .map((item) => stripQuotes(item))
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function parseYamlScalar(rawValue) {
+      const value = String(rawValue || "").trim();
+      if (!value) return "";
+      if (value.startsWith("[") && value.endsWith("]")) {
+        return parseInlineList(value);
+      }
+      if (
+        (value.startsWith("\"") && value.endsWith("\"")) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        return stripQuotes(value);
+      }
+      if (/^(true|false)$/i.test(value)) {
+        return value.toLowerCase() === "true";
+      }
+      if (/^-?\d+$/.test(value)) {
+        return Number(value);
+      }
+      return value;
+    }
+
+    function toDisplayDefault(raw) {
+      const text = String(raw || "").trim();
+      if (!text || text === "None") return "";
+      if (
+        (text.startsWith("\"") && text.endsWith("\"")) ||
+        (text.startsWith("'") && text.endsWith("'"))
+      ) {
+        return text.slice(1, -1);
+      }
+      if (text === "True") return "true";
+      if (text === "False") return "false";
+      return text;
+    }
+
+    function splitTopLevel(text) {
+      const parts = [];
+      let current = "";
+      let square = 0;
+      let round = 0;
+      let brace = 0;
+      let quote = "";
+
+      for (const char of String(text || "")) {
+        if (quote) {
+          current += char;
+          if (char === quote) quote = "";
+          continue;
+        }
+        if (char === "'" || char === "\"") {
+          quote = char;
+          current += char;
+          continue;
+        }
+        if (char === "[") square += 1;
+        if (char === "]") square -= 1;
+        if (char === "(") round += 1;
+        if (char === ")") round -= 1;
+        if (char === "{") brace += 1;
+        if (char === "}") brace -= 1;
+
+        if (char === "," && square === 0 && round === 0 && brace === 0) {
+          parts.push(current.trim());
+          current = "";
+          continue;
+        }
+        current += char;
       }
 
-      const removeBtn = document.createElement("button");
-      removeBtn.textContent = "Remove";
-      removeBtn.onclick = () => node.remove();
-      node.appendChild(removeBtn);
-      return node;
+      if (current.trim()) {
+        parts.push(current.trim());
+      }
+      return parts;
     }
 
-    function toBool(v) {
-      return String(v).trim().toLowerCase() === "true";
+    function parseSignatureParams(signatureText) {
+      const params = [];
+      const open = signatureText.indexOf("(");
+      const close = signatureText.lastIndexOf(")");
+      if (open < 0 || close <= open) return params;
+      const rawParams = signatureText.slice(open + 1, close);
+
+      splitTopLevel(rawParams).forEach((token) => {
+        const trimmed = token.trim();
+        if (!trimmed || trimmed === "self" || trimmed === "*") return;
+        if (trimmed.startsWith("**")) return;
+
+        let left = trimmed;
+        let defaultValue = "";
+        const eqIndex = trimmed.indexOf("=");
+        if (eqIndex >= 0) {
+          left = trimmed.slice(0, eqIndex).trim();
+          defaultValue = toDisplayDefault(trimmed.slice(eqIndex + 1).trim());
+        }
+
+        const colonIndex = left.indexOf(":");
+        const name = (colonIndex >= 0 ? left.slice(0, colonIndex) : left).trim().replace(/^\*/, "");
+        if (!name) return;
+        params.push({
+          name,
+          defaultValue,
+        });
+      });
+
+      return params;
+    }
+
+    function parsePythonClassMethods(source, className, filterFn) {
+      const lines = String(source || "").split(/\r?\n/);
+      const classLineIndex = lines.findIndex((line) =>
+        new RegExp(`^\\s*class\\s+${className}\\b`).test(line)
+      );
+      if (classLineIndex < 0) return [];
+
+      const classIndent = (lines[classLineIndex].match(/^ */) || [""])[0].length;
+      const methods = [];
+      const closingPattern = /\)\s*(?:->.*)?\s*:\s*$/;
+
+      for (let index = classLineIndex + 1; index < lines.length; index += 1) {
+        const line = lines[index];
+        const trimmed = line.trim();
+        const indent = (line.match(/^ */) || [""])[0].length;
+
+        if (trimmed.startsWith("class ") && indent <= classIndent) {
+          break;
+        }
+
+        const methodMatch = line.match(/^\s+(?:async\s+)?def\s+([A-Za-z0-9_]+)\s*\(/);
+        if (!methodMatch || indent !== classIndent + 4) continue;
+
+        const methodName = methodMatch[1];
+        const signatureLines = [trimmed];
+        while (index + 1 < lines.length && !closingPattern.test(lines[index].trim())) {
+          index += 1;
+          signatureLines.push(lines[index].trim());
+        }
+
+        if (typeof filterFn === "function" && !filterFn(methodName)) {
+          continue;
+        }
+
+        const signatureText = signatureLines.join(" ");
+        methods.push({
+          name: methodName,
+          params: parseSignatureParams(signatureText),
+          signature: signatureText,
+        });
+      }
+
+      return methods;
+    }
+
+    function mergeMethods(...collections) {
+      const merged = new Map();
+      collections.flat().forEach((method) => {
+        if (!method || !method.name) return;
+        if (!merged.has(method.name)) {
+          merged.set(method.name, method);
+        }
+      });
+      return [...merged.values()].sort((left, right) => left.name.localeCompare(right.name));
+    }
+
+    function parseCollectionEventMetadata(yamlText) {
+      const lines = String(yamlText || "").split(/\r?\n/);
+      const result = {
+        variables: {},
+        reports: {},
+        events: {},
+        workflows: [],
+      };
+
+      let inCollectionEvents = false;
+      let section = "";
+      let currentId = "";
+
+      for (const rawLine of lines) {
+        const indent = (rawLine.match(/^ */) || [""])[0].length;
+        const trimmed = rawLine.trim();
+
+        if (!trimmed || trimmed.startsWith("#")) continue;
+
+        if (!inCollectionEvents) {
+          if (trimmed === "collection_events:") {
+            inCollectionEvents = true;
+          }
+          continue;
+        }
+
+        if (indent <= 2 && trimmed !== "collection_events:") {
+          break;
+        }
+
+        if (indent === 4 && /^(variables|reports|events):$/.test(trimmed)) {
+          section = trimmed.replace(":", "");
+          currentId = "";
+          continue;
+        }
+
+        if (indent === 6) {
+          const itemMatch = trimmed.match(/^("?[\w-]+"?):\s*$/);
+          if (itemMatch) {
+            currentId = stripQuotes(itemMatch[1]);
+            if (section === "variables") {
+              result.variables[currentId] = { vid: currentId, name: currentId };
+            } else if (section === "reports") {
+              result.reports[currentId] = { rptid: currentId, name: currentId, vids: [] };
+            } else if (section === "events") {
+              result.events[currentId] = { ceid: currentId, name: currentId, reports: [] };
+            }
+            continue;
+          }
+        }
+
+        if (!currentId || indent !== 8) continue;
+
+        const [rawKey, ...rawValueParts] = trimmed.split(":");
+        if (!rawKey || rawValueParts.length === 0) continue;
+        const key = rawKey.trim();
+        const valueText = rawValueParts.join(":").trim();
+
+        if (section === "variables" && key === "name") {
+          result.variables[currentId].name = stripQuotes(valueText);
+        }
+
+        if (section === "reports") {
+          if (key === "name") {
+            result.reports[currentId].name = stripQuotes(valueText);
+          }
+          if (key === "vids") {
+            result.reports[currentId].vids = parseInlineList(valueText);
+          }
+        }
+
+        if (section === "events") {
+          if (key === "name") {
+            result.events[currentId].name = stripQuotes(valueText);
+          }
+          if (key === "reports") {
+            result.events[currentId].reports = parseInlineList(valueText);
+          }
+        }
+      }
+
+      return result;
+    }
+
+    function extractWorkflowBlocks(yamlText) {
+      const lines = String(yamlText || "").split(/\r?\n/);
+      const blocks = [];
+      let inWorkflows = false;
+      let workflowsIndent = -1;
+      let blockIndent = -1;
+      let currentLines = [];
+
+      function pushBlock() {
+        if (!currentLines.length) return;
+        while (currentLines.length && !currentLines[currentLines.length - 1].trim()) {
+          currentLines.pop();
+        }
+        const snippet = currentLines.join("\n").trim();
+        if (!snippet) {
+          currentLines = [];
+          return;
+        }
+        const parsed = parseWorkflowSnippet(snippet);
+        blocks.push({
+          name: parsed.name || `workflow_${blocks.length + 1}`,
+          snippet,
+          parsed,
+        });
+        currentLines = [];
+      }
+
+      for (const rawLine of lines) {
+        const indent = (rawLine.match(/^ */) || [""])[0].length;
+        const trimmed = rawLine.trim();
+
+        if (!inWorkflows) {
+          if (trimmed === "workflows:") {
+            inWorkflows = true;
+            workflowsIndent = indent;
+          }
+          continue;
+        }
+
+        if (trimmed && indent <= workflowsIndent) {
+          pushBlock();
+          break;
+        }
+
+        if (trimmed.startsWith("- ") && indent === workflowsIndent + 2) {
+          pushBlock();
+          blockIndent = indent;
+          currentLines.push(rawLine.slice(blockIndent));
+          continue;
+        }
+
+        if (!currentLines.length) {
+          continue;
+        }
+
+        if (!trimmed) {
+          currentLines.push("");
+          continue;
+        }
+
+        currentLines.push(rawLine.slice(Math.min(rawLine.length, blockIndent)));
+      }
+
+      pushBlock();
+      return blocks;
+    }
+
+    function buildEventDetails(meta) {
+      const events = Object.values(meta.events || {});
+      return events
+        .sort((left, right) => String(left.ceid).localeCompare(String(right.ceid)))
+        .map((eventItem) => {
+          const reportDetails = (eventItem.reports || []).map((reportId) => {
+            const report = meta.reports[reportId] || { rptid: reportId, vids: [] };
+            const vids = (report.vids || []).map((vid) => {
+              const variable = meta.variables[vid];
+              return {
+                vid,
+                name: variable ? variable.name : vid,
+              };
+            });
+            return {
+              rptid: reportId,
+              name: report.name || reportId,
+              vids,
+            };
+          });
+
+          const variableNames = [];
+          reportDetails.forEach((report) => {
+            report.vids.forEach((vidItem) => {
+              if (!variableNames.includes(vidItem.name)) {
+                variableNames.push(vidItem.name);
+              }
+            });
+          });
+
+          return {
+            ceid: eventItem.ceid,
+            name: eventItem.name,
+            reports: reportDetails,
+            variables: variableNames,
+          };
+        });
+    }
+
+    function summarizeSource(name, ok, detail) {
+      return { name, ok, detail: detail || "" };
+    }
+
+    async function fetchText(url) {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.text();
+    }
+
+    async function fileToText(inputId) {
+      const input = document.getElementById(inputId);
+      const file = input && input.files && input.files[0];
+      if (!file) return "";
+      return file.text();
+    }
+
+    function getMethodMeta(kind, name) {
+      const list = kind === "call_method" ? state.metadata.callMethods : state.metadata.secsMethods;
+      return list.find((item) => item.name === name) || null;
+    }
+
+    function getEventMetaByName(name) {
+      const events = buildEventDetails(state.metadata.yaml);
+      return events.find((item) => item.name === name) || null;
+    }
+
+    function getActiveTriggerNode() {
+      return state.nodes.find((node) => node.type === "trigger") || null;
+    }
+
+    function getTriggerVariables() {
+      const triggerNode = getActiveTriggerNode();
+      const eventName = triggerNode ? String(triggerNode.eventName || "").trim() : "";
+      const eventMeta = eventName ? getEventMetaByName(eventName) : null;
+      const values = [...COMMON_TRIGGER_VARIABLES];
+      if (eventMeta) {
+        eventMeta.variables.forEach((name) => {
+          if (!values.includes(name)) values.push(name);
+        });
+      }
+      return values;
+    }
+
+    function insertPlaceholder(targetInput, variableName) {
+      if (!targetInput) return;
+      const placeholder = `\${${variableName}}`;
+      const start = targetInput.selectionStart ?? targetInput.value.length;
+      const end = targetInput.selectionEnd ?? targetInput.value.length;
+      targetInput.value = `${targetInput.value.slice(0, start)}${placeholder}${targetInput.value.slice(end)}`;
+      targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+      targetInput.focus();
+      targetInput.selectionStart = targetInput.selectionEnd = start + placeholder.length;
+    }
+
+    function nextNodeId() {
+      const id = state.nextNodeId;
+      state.nextNodeId += 1;
+      return id;
+    }
+
+    function createNodeState(type, initial = {}) {
+      if (type === "trigger") {
+        return {
+          id: nextNodeId(),
+          type,
+          workflowName: initial.workflowName || "visual_flow_1",
+          sf: initial.sf || "S6F11",
+          eventName: initial.eventName || "",
+        };
+      }
+
+      if (type === "call_method" || type === "send_secs_msg") {
+        return {
+          id: nextNodeId(),
+          type,
+          method: initial.method || "",
+          params: { ...(initial.params || {}) },
+          extraParams: [...(initial.extraParams || [])],
+          saveAs: initial.saveAs || "",
+          onErrorRaw: initial.onErrorRaw || "",
+        };
+      }
+
+      if (type === "configure_collection_events") {
+        return {
+          id: nextNodeId(),
+          type,
+          enableMode: initial.enableMode || "selected",
+        };
+      }
+
+      if (type === "wait_reply") {
+        return {
+          id: nextNodeId(),
+          type,
+          expectSf: initial.expectSf || "S2F42",
+          timeout: initial.timeout || "5",
+        };
+      }
+
+      if (type === "if_hcack") {
+        return {
+          id: nextNodeId(),
+          type,
+          equals: initial.equals || "0",
+        };
+      }
+
+      return {
+        id: nextNodeId(),
+        type,
+      };
+    }
+
+    function normalizeMethodNode(node) {
+      const meta = getMethodMeta(node.type, node.method);
+      if (!meta) return node;
+
+      const knownNames = new Set(meta.params.map((item) => item.name));
+      const params = { ...(node.params || {}) };
+      meta.params.forEach((param) => {
+        if (!(param.name in params)) {
+          params[param.name] = param.defaultValue || "";
+        }
+      });
+
+      const extraParams = [...(node.extraParams || [])].filter((row) => {
+        return row && row.key && !knownNames.has(row.key);
+      });
+
+      return {
+        ...node,
+        params,
+        extraParams,
+      };
+    }
+
+    function updateNode(nodeId, patch, rerender = false) {
+      state.nodes = state.nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        const next = { ...node, ...patch };
+        if (next.type === "call_method" || next.type === "send_secs_msg") {
+          return normalizeMethodNode(next);
+        }
+        return next;
+      });
+      if (rerender) renderCanvas();
+    }
+
+    function moveNode(nodeId, direction) {
+      const index = state.nodes.findIndex((node) => node.id === nodeId);
+      if (index < 0) return;
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= state.nodes.length) return;
+      const clone = [...state.nodes];
+      const [item] = clone.splice(index, 1);
+      clone.splice(nextIndex, 0, item);
+      state.nodes = clone;
+      renderCanvas();
+    }
+
+    function deleteNode(nodeId) {
+      state.nodes = state.nodes.filter((node) => node.id !== nodeId);
+      renderCanvas();
+    }
+
+    function addNode(type) {
+      state.nodes.push(createNodeState(type));
+      renderCanvas();
+    }
+
+    function renderPalette() {
+      paletteEl.innerHTML = "";
+      PALETTE_ITEMS.forEach((item) => {
+        const block = document.createElement("div");
+        block.className = "palette-item";
+        block.draggable = true;
+        block.dataset.type = item.type;
+        block.innerHTML = `<strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.hint)}</span>`;
+        block.addEventListener("dragstart", (event) => {
+          event.dataTransfer.setData("application/node-type", item.type);
+        });
+        block.addEventListener("click", () => addNode(item.type));
+        paletteEl.appendChild(block);
+      });
+    }
+
+    function buildPlaceholderBank() {
+      const box = document.createElement("div");
+      box.className = "helper-box";
+      const title = document.createElement("div");
+      title.className = "helper-title";
+      title.textContent = "Available Trigger Variables";
+      box.appendChild(title);
+      const chips = document.createElement("div");
+      chips.className = "chips";
+      getTriggerVariables().forEach((name) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "chip";
+        chip.textContent = `\${${name}}`;
+        chip.addEventListener("click", () => insertPlaceholder(state.lastFocusedInput, name));
+        chips.appendChild(chip);
+      });
+      box.appendChild(chips);
+      return box;
+    }
+
+    function createField(labelText, inputEl) {
+      const field = document.createElement("div");
+      field.className = "field";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      field.appendChild(label);
+      field.appendChild(inputEl);
+      return field;
+    }
+
+    function createTextInput(value, onInput, placeholder = "") {
+      const input = document.createElement("input");
+      input.value = value || "";
+      input.placeholder = placeholder;
+      input.addEventListener("focus", () => {
+        state.lastFocusedInput = input;
+      });
+      input.addEventListener("input", () => onInput(input.value));
+      return input;
+    }
+
+    function createSelect(options, value, onChange, placeholder = "Select") {
+      const select = document.createElement("select");
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = placeholder;
+      select.appendChild(blank);
+      options.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.value;
+        option.textContent = item.label;
+        select.appendChild(option);
+      });
+      select.value = value || "";
+      select.addEventListener("change", () => onChange(select.value));
+      select.addEventListener("focus", () => {
+        state.lastFocusedInput = select;
+      });
+      return select;
+    }
+
+    function createTextarea(value, onInput, placeholder = "") {
+      const textarea = document.createElement("textarea");
+      textarea.value = value || "";
+      textarea.placeholder = placeholder;
+      textarea.addEventListener("focus", () => {
+        state.lastFocusedInput = textarea;
+      });
+      textarea.addEventListener("input", () => onInput(textarea.value));
+      return textarea;
+    }
+
+    function renderMethodParams(node, container) {
+      const meta = getMethodMeta(node.type, node.method);
+      if (!meta) {
+        const note = document.createElement("div");
+        note.className = "helper-note";
+        note.textContent = node.method
+          ? `Method ${node.method} is not available in the loaded metadata.`
+          : "Load metadata and choose a method to render real parameter fields.";
+        container.appendChild(note);
+        return;
+      }
+
+      const signature = document.createElement("div");
+      signature.className = "signature";
+      signature.textContent = meta.signature;
+      container.appendChild(signature);
+
+      const paramList = document.createElement("div");
+      paramList.className = "param-list";
+      meta.params.forEach((param) => {
+        const row = document.createElement("div");
+        row.className = "param-row";
+        const key = document.createElement("div");
+        key.className = "param-key mono";
+        key.textContent = param.name;
+        const input = createTextInput(
+          node.params && node.params[param.name] !== undefined ? node.params[param.name] : (param.defaultValue || ""),
+          (value) => {
+            const params = { ...(node.params || {}) };
+            params[param.name] = value;
+            updateNode(node.id, { params });
+          },
+          param.defaultValue ? `default: ${param.defaultValue}` : "",
+        );
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "icon-btn";
+        button.textContent = "↺";
+        button.title = "Reset to default";
+        button.addEventListener("click", () => {
+          const params = { ...(node.params || {}) };
+          params[param.name] = param.defaultValue || "";
+          updateNode(node.id, { params }, true);
+        });
+        row.appendChild(key);
+        row.appendChild(input);
+        row.appendChild(button);
+        paramList.appendChild(row);
+      });
+      container.appendChild(paramList);
+
+      const extraTitle = document.createElement("div");
+      extraTitle.className = "helper-title";
+      extraTitle.style.marginTop = "14px";
+      extraTitle.textContent = "Extra Params";
+      container.appendChild(extraTitle);
+
+      const extras = document.createElement("div");
+      extras.className = "param-list";
+      (node.extraParams || []).forEach((rowState, index) => {
+        const row = document.createElement("div");
+        row.className = "param-row extra";
+
+        const keyInput = createTextInput(
+          rowState.key || "",
+          (value) => {
+            const extraParams = [...(node.extraParams || [])];
+            extraParams[index] = { ...extraParams[index], key: value };
+            updateNode(node.id, { extraParams });
+          },
+          "key",
+        );
+        const valueInput = createTextInput(
+          rowState.value || "",
+          (value) => {
+            const extraParams = [...(node.extraParams || [])];
+            extraParams[index] = { ...extraParams[index], value };
+            updateNode(node.id, { extraParams });
+          },
+          "value",
+        );
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "icon-btn";
+        removeBtn.textContent = "−";
+        removeBtn.title = "Remove extra param";
+        removeBtn.addEventListener("click", () => {
+          const extraParams = [...(node.extraParams || [])];
+          extraParams.splice(index, 1);
+          updateNode(node.id, { extraParams }, true);
+        });
+        row.appendChild(keyInput);
+        row.appendChild(valueInput);
+        row.appendChild(removeBtn);
+        extras.appendChild(row);
+      });
+      container.appendChild(extras);
+
+      const addRowButton = document.createElement("button");
+      addRowButton.type = "button";
+      addRowButton.className = "btn ghost";
+      addRowButton.textContent = "Add Extra Param";
+      addRowButton.addEventListener("click", () => {
+        const extraParams = [...(node.extraParams || []), { key: "", value: "" }];
+        updateNode(node.id, { extraParams }, true);
+      });
+      container.appendChild(addRowButton);
+    }
+
+    function buildTriggerPreview(node) {
+      const eventMeta = getEventMetaByName(node.eventName);
+      const box = document.createElement("div");
+      box.className = "helper-box";
+      const title = document.createElement("div");
+      title.className = "helper-title";
+      title.textContent = "Event Preview";
+      box.appendChild(title);
+
+      if (!eventMeta) {
+        const empty = document.createElement("div");
+        empty.className = "subtle";
+        empty.textContent = node.eventName
+          ? "This event name is not found in the loaded YAML metadata."
+          : "Select an event name to see its reports, VIDs, and available placeholders.";
+        box.appendChild(empty);
+        return box;
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "meta small";
+      meta.innerHTML = `<strong>${escapeHtml(eventMeta.name)}</strong> · CEID ${escapeHtml(eventMeta.ceid)}`;
+      box.appendChild(meta);
+
+      const chipWrap = document.createElement("div");
+      chipWrap.className = "pill-line";
+      eventMeta.variables.forEach((name) => {
+        const chip = document.createElement("span");
+        chip.className = "chip passive";
+        chip.textContent = `\${${name}}`;
+        chipWrap.appendChild(chip);
+      });
+      box.appendChild(chipWrap);
+
+      const tree = document.createElement("div");
+      tree.className = "tree";
+      eventMeta.reports.forEach((report) => {
+        const block = document.createElement("div");
+        block.className = "tree-block";
+        const head = document.createElement("div");
+        head.className = "small";
+        head.innerHTML = `<strong>RPTID ${escapeHtml(report.rptid)}</strong> · ${escapeHtml(report.name || report.rptid)}`;
+        block.appendChild(head);
+        const vids = document.createElement("div");
+        vids.className = "pill-line";
+        report.vids.forEach((vid) => {
+          const chip = document.createElement("span");
+          chip.className = "chip passive";
+          chip.textContent = `${vid.name} (${vid.vid})`;
+          vids.appendChild(chip);
+        });
+        block.appendChild(vids);
+        tree.appendChild(block);
+      });
+      box.appendChild(tree);
+      return box;
+    }
+
+    function renderNodeCard(node, index) {
+      const card = document.createElement("div");
+      card.className = "node-card";
+
+      const head = document.createElement("div");
+      head.className = "node-head";
+      const meta = document.createElement("div");
+      meta.className = "node-meta";
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = node.type;
+      const title = document.createElement("div");
+      title.className = "node-title";
+      if (node.type === "trigger") {
+        title.textContent = node.workflowName || "Workflow Trigger";
+      } else if (node.method) {
+        title.textContent = node.method;
+      } else {
+        title.textContent = `Step ${index + 1}`;
+      }
+      meta.appendChild(badge);
+      meta.appendChild(title);
+
+      const actions = document.createElement("div");
+      actions.className = "node-actions";
+      const upBtn = document.createElement("button");
+      upBtn.type = "button";
+      upBtn.className = "icon-btn";
+      upBtn.textContent = "↑";
+      upBtn.disabled = index === 0;
+      upBtn.addEventListener("click", () => moveNode(node.id, -1));
+      const downBtn = document.createElement("button");
+      downBtn.type = "button";
+      downBtn.className = "icon-btn";
+      downBtn.textContent = "↓";
+      downBtn.disabled = index === state.nodes.length - 1;
+      downBtn.addEventListener("click", () => moveNode(node.id, 1));
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "icon-btn";
+      deleteBtn.textContent = "✕";
+      deleteBtn.addEventListener("click", () => deleteNode(node.id));
+      actions.appendChild(upBtn);
+      actions.appendChild(downBtn);
+      actions.appendChild(deleteBtn);
+
+      head.appendChild(meta);
+      head.appendChild(actions);
+      card.appendChild(head);
+
+      const body = document.createElement("div");
+      body.className = "node-body";
+
+      if (node.type === "trigger") {
+        body.appendChild(
+          createField(
+            "Workflow Name",
+            createTextInput(node.workflowName, (value) => updateNode(node.id, { workflowName: value })),
+          ),
+        );
+
+        const sfInput = createTextInput(node.sf, (value) => updateNode(node.id, { sf: value }));
+        body.appendChild(createField("sf", sfInput));
+
+        const eventInput = createTextInput(node.eventName, (value) => {
+          updateNode(node.id, { eventName: value });
+        }, "slot_map_waiting_for_host");
+        eventInput.setAttribute("list", "eventNameOptions");
+        body.appendChild(createField("event_name", eventInput));
+        body.appendChild(buildTriggerPreview(node));
+      }
+
+      if (node.type === "call_method" || node.type === "send_secs_msg") {
+        const options = (node.type === "call_method" ? state.metadata.callMethods : state.metadata.secsMethods)
+          .map((item) => ({ value: item.name, label: item.name }));
+        const select = createSelect(
+          options,
+          node.method,
+          (value) => updateNode(node.id, { method: value }, true),
+          node.type === "call_method" ? "Select call method" : "Select SECS method",
+        );
+        body.appendChild(createField("Method", select));
+
+        const saveAsInput = createTextInput(
+          node.saveAs || "",
+          (value) => updateNode(node.id, { saveAs: value }),
+          "optional save_as",
+        );
+        body.appendChild(createField("save_as", saveAsInput));
+
+        renderMethodParams(node, body);
+        body.appendChild(buildPlaceholderBank());
+
+        const onErrorArea = createTextarea(
+          node.onErrorRaw || "",
+          (value) => updateNode(node.id, { onErrorRaw: value }),
+          "- action: \"call_method\"\n  method: \"PROCESS_START_CANCEL\"",
+        );
+        body.appendChild(createField("on_error (raw YAML step list, optional)", onErrorArea));
+      }
+
+      if (node.type === "configure_collection_events") {
+        const select = createSelect(
+          [
+            { value: "selected", label: "selected" },
+            { value: "all", label: "all" },
+            { value: "disabled", label: "disabled" },
+          ],
+          node.enableMode,
+          (value) => updateNode(node.id, { enableMode: value }),
+          "Select enable mode",
+        );
+        body.appendChild(createField("enable_mode", select));
+      }
+
+      if (node.type === "wait_reply") {
+        body.appendChild(
+          createField(
+            "expect_sf",
+            createTextInput(node.expectSf || "", (value) => updateNode(node.id, { expectSf: value }), "S2F42"),
+          ),
+        );
+        body.appendChild(
+          createField(
+            "timeout",
+            createTextInput(String(node.timeout || ""), (value) => updateNode(node.id, { timeout: value }), "5"),
+          ),
+        );
+      }
+
+      if (node.type === "if_hcack") {
+        body.appendChild(
+          createField(
+            "equals",
+            createTextInput(String(node.equals || ""), (value) => updateNode(node.id, { equals: value }), "0"),
+          ),
+        );
+      }
+
+      card.appendChild(body);
+      return card;
+    }
+
+    function renderCanvas() {
+      canvasEl.innerHTML = "";
+      if (!state.nodes.length) {
+        const empty = document.createElement("div");
+        empty.className = "canvas-empty";
+        empty.innerHTML = "Drag steps from the palette or click <strong>Add Trigger</strong> to start a real workflow.";
+        canvasEl.appendChild(empty);
+        refreshEventMap();
+        return;
+      }
+
+      state.nodes = state.nodes.map((node) => {
+        if (node.type === "call_method" || node.type === "send_secs_msg") {
+          return normalizeMethodNode(node);
+        }
+        return node;
+      });
+
+      state.nodes.forEach((node, index) => {
+        canvasEl.appendChild(renderNodeCard(node, index));
+      });
+      refreshEventMap();
+    }
+
+    function renderMethodSummary() {
+      methodSummaryEl.innerHTML = "";
+
+      const sections = [
+        {
+          title: "Call Method",
+          items: state.metadata.callMethods,
+          tone: "success",
+        },
+        {
+          title: "SECS Message",
+          items: state.metadata.secsMethods,
+          tone: "passive",
+        },
+      ];
+
+      sections.forEach((section) => {
+        const card = document.createElement("div");
+        card.className = "method-card";
+        const methods = section.items || [];
+        card.innerHTML = `
+          <strong>${escapeHtml(section.title)} · ${methods.length}</strong>
+          <div class="meta">Loaded from project sources. Signatures are parsed from Python definitions and used to build parameter fields.</div>
+        `;
+
+        const chips = document.createElement("div");
+        chips.className = "pill-line";
+        methods.forEach((method) => {
+          const chip = document.createElement("span");
+          chip.className = `chip ${section.tone}`;
+          chip.textContent = method.name;
+          chips.appendChild(chip);
+        });
+        card.appendChild(chips);
+        methodSummaryEl.appendChild(card);
+      });
+    }
+
+    function renderWorkflowLibrary() {
+      workflowLibraryEl.innerHTML = "";
+      const workflows = state.metadata.yaml.workflows || [];
+      const triggerNode = getActiveTriggerNode();
+      const activeWorkflowName = triggerNode ? String(triggerNode.workflowName || "").trim() : "";
+
+      if (!workflows.length) {
+        const empty = document.createElement("div");
+        empty.className = "method-card";
+        empty.innerHTML = `
+          <strong>No workflows loaded</strong>
+          <div class="meta">Load a config YAML file to browse existing workflow definitions and restore them visually.</div>
+        `;
+        workflowLibraryEl.appendChild(empty);
+        return;
+      }
+
+      workflows.forEach((workflow) => {
+        const card = document.createElement("div");
+        card.className = "method-card workflow-card";
+        if (workflow.name === activeWorkflowName) {
+          card.classList.add("active");
+        }
+
+        const trigger = workflow.parsed && workflow.parsed.trigger ? workflow.parsed.trigger : {};
+        const triggerSf = trigger.sf || "";
+        const triggerEvent = trigger.eventName || trigger.event_name || "";
+        const stepCount = workflow.parsed && workflow.parsed.steps ? workflow.parsed.steps.length : 0;
+
+        card.innerHTML = `
+          <strong>${escapeHtml(workflow.name)}</strong>
+          <div class="meta">Trigger ${escapeHtml(triggerSf || "-")} · event ${escapeHtml(triggerEvent || "-")} · ${stepCount} step(s)</div>
+        `;
+
+        const pills = document.createElement("div");
+        pills.className = "pill-line";
+        if (triggerEvent) {
+          const eventChip = document.createElement("span");
+          eventChip.className = "chip passive";
+          eventChip.textContent = triggerEvent;
+          pills.appendChild(eventChip);
+        }
+        if (triggerSf) {
+          const sfChip = document.createElement("span");
+          sfChip.className = "chip passive";
+          sfChip.textContent = triggerSf;
+          pills.appendChild(sfChip);
+        }
+        card.appendChild(pills);
+
+        const preview = document.createElement("div");
+        preview.className = "signature";
+        preview.textContent = workflow.snippet.split(/\r?\n/).slice(0, 8).join("\n");
+        card.appendChild(preview);
+
+        card.addEventListener("click", () => {
+          loadWorkflowSnippet(workflow.snippet, true);
+        });
+        workflowLibraryEl.appendChild(card);
+      });
+    }
+
+    function refreshEventMap() {
+      const activeTrigger = getActiveTriggerNode();
+      const activeEventName = activeTrigger ? activeTrigger.eventName : "";
+      const events = buildEventDetails(state.metadata.yaml);
+
+      eventMapEl.innerHTML = "";
+      if (!events.length) {
+        const empty = document.createElement("div");
+        empty.className = "event-card";
+        empty.innerHTML = `<strong>No YAML metadata loaded</strong><div class="meta">Load a config YAML file to visualize event/report/vid relationships.</div>`;
+        eventMapEl.appendChild(empty);
+        renderEventOptions();
+        return;
+      }
+
+      events.forEach((eventItem) => {
+        const card = document.createElement("div");
+        card.className = "event-card";
+        if (eventItem.name === activeEventName) {
+          card.classList.add("active");
+        }
+        card.innerHTML = `
+          <strong>${escapeHtml(eventItem.name)}</strong>
+          <div class="meta">CEID ${escapeHtml(eventItem.ceid)} · Reports ${eventItem.reports.map((item) => item.rptid).join(", ") || "-"}</div>
+        `;
+
+        const chips = document.createElement("div");
+        chips.className = "pill-line";
+        eventItem.variables.forEach((name) => {
+          const chip = document.createElement("span");
+          chip.className = "chip passive";
+          chip.textContent = `${name}`;
+          chips.appendChild(chip);
+        });
+        card.appendChild(chips);
+
+        const tree = document.createElement("div");
+        tree.className = "tree";
+        eventItem.reports.forEach((report) => {
+          const block = document.createElement("div");
+          block.className = "tree-block";
+          const head = document.createElement("div");
+          head.className = "small";
+          head.innerHTML = `<strong>RPTID ${escapeHtml(report.rptid)}</strong>`;
+          block.appendChild(head);
+          const varsWrap = document.createElement("div");
+          varsWrap.className = "pill-line";
+          report.vids.forEach((vidItem) => {
+            const chip = document.createElement("span");
+            chip.className = "chip passive";
+            chip.textContent = `${vidItem.name} (${vidItem.vid})`;
+            varsWrap.appendChild(chip);
+          });
+          block.appendChild(varsWrap);
+          tree.appendChild(block);
+        });
+        card.appendChild(tree);
+
+        card.addEventListener("click", () => {
+          const triggerNode = getActiveTriggerNode();
+          if (!triggerNode) return;
+          updateNode(triggerNode.id, { eventName: eventItem.name }, true);
+        });
+        eventMapEl.appendChild(card);
+      });
+
+      renderEventOptions();
+    }
+
+    function renderEventOptions() {
+      const existing = document.getElementById("eventNameOptions");
+      if (existing) existing.remove();
+      const datalist = document.createElement("datalist");
+      datalist.id = "eventNameOptions";
+      buildEventDetails(state.metadata.yaml).forEach((eventItem) => {
+        const option = document.createElement("option");
+        option.value = eventItem.name;
+        datalist.appendChild(option);
+      });
+      document.body.appendChild(datalist);
+    }
+
+    function renderSourceStatus() {
+      sourceStatusEl.innerHTML = "";
+      const summary = state.metadata.sourceSummary || {};
+      const items = [
+        ["call_method.py", summary.callMethod || summarizeSource("call_method.py", false, "Not loaded")],
+        ["common.py", summary.common || summarizeSource("common.py", false, "Not loaded")],
+        ["secs_msg.py", summary.secsMsg || summarizeSource("secs_msg.py", false, "Not loaded")],
+        ["workflow yaml", summary.yaml || summarizeSource("workflow yaml", false, "Not loaded")],
+      ];
+
+      items.forEach(([label, status]) => {
+        const row = document.createElement("div");
+        row.className = "status-item";
+        row.innerHTML = `
+          <strong>${escapeHtml(label)}</strong>
+          <div class="meta">${status.ok ? "Loaded" : "Pending"} · ${escapeHtml(status.detail || "")}</div>
+        `;
+        sourceStatusEl.appendChild(row);
+      });
+    }
+
+    function renderAllMetadata() {
+      renderSourceStatus();
+      renderMethodSummary();
+      renderWorkflowLibrary();
+      refreshEventMap();
+      renderCanvas();
+    }
+
+    function classifyImportedParams(node) {
+      if (node.type !== "call_method" && node.type !== "send_secs_msg") return node;
+      const meta = getMethodMeta(node.type, node.method);
+      if (!meta) return node;
+      const knownNames = new Set(meta.params.map((param) => param.name));
+      const knownParams = {};
+      const extraParams = [];
+      Object.entries(node.params || {}).forEach(([key, value]) => {
+        if (knownNames.has(key)) {
+          knownParams[key] = value;
+        } else {
+          extraParams.push({ key, value });
+        }
+      });
+      return normalizeMethodNode({
+        ...node,
+        params: knownParams,
+        extraParams,
+      });
+    }
+
+    function applyProjectSources(sources) {
+      const callMethodMethods = mergeMethods(
+        parsePythonClassMethods(
+          sources.callMethodText,
+          "CallMethodService",
+          (name) => /^[A-Z0-9_]+$/.test(name) && !name.startsWith("_"),
+        ),
+        parsePythonClassMethods(
+          sources.commonText,
+          "CallMethodCommonMixin",
+          (name) => /^[A-Z0-9_]+$/.test(name) && !name.startsWith("_"),
+        ),
+      );
+
+      const secsMethods = mergeMethods(
+        parsePythonClassMethods(
+          sources.secsMsgText,
+          "SecsMessageService",
+          (name) => /^[A-Z0-9_]+$/.test(name) && !name.startsWith("_"),
+        ),
+      );
+
+      state.metadata.callMethods = callMethodMethods;
+      state.metadata.secsMethods = secsMethods;
+      state.metadata.yaml = parseCollectionEventMetadata(sources.yamlText);
+      state.metadata.yaml.workflows = extractWorkflowBlocks(sources.yamlText);
+      state.metadata.sourceSummary = {
+        callMethod: summarizeSource("call_method.py", !!sources.callMethodText, `${callMethodMethods.length} methods`),
+        common: summarizeSource("common.py", !!sources.commonText, "public helpers loaded"),
+        secsMsg: summarizeSource("secs_msg.py", !!sources.secsMsgText, `${secsMethods.length} methods`),
+        yaml: summarizeSource(
+          "workflow yaml",
+          !!sources.yamlText,
+          `${Object.keys(state.metadata.yaml.events).length} events · ${Object.keys(state.metadata.yaml.variables).length} vars · ${(state.metadata.yaml.workflows || []).length} workflows`,
+        ),
+      };
+
+      state.nodes = state.nodes.map(classifyImportedParams);
+      renderAllMetadata();
+    }
+
+    async function autoLoadProjectSources() {
+      const summary = {};
+      const loadMap = {
+        callMethodText: { label: "call_method.py", url: DEFAULT_SOURCE_PATHS.callMethod },
+        commonText: { label: "common.py", url: DEFAULT_SOURCE_PATHS.common },
+        secsMsgText: { label: "secs_msg.py", url: DEFAULT_SOURCE_PATHS.secsMsg },
+        yamlText: { label: "workflow yaml", url: DEFAULT_SOURCE_PATHS.yaml },
+      };
+
+      const results = {};
+      for (const [key, item] of Object.entries(loadMap)) {
+        try {
+          results[key] = await fetchText(item.url);
+          summary[key] = summarizeSource(item.label, true, `Loaded from ${item.url}`);
+        } catch (error) {
+          results[key] = "";
+          summary[key] = summarizeSource(item.label, false, `Auto load failed: ${error.message}`);
+        }
+      }
+
+      state.metadata.sourceSummary = {
+        callMethod: summary.callMethodText,
+        common: summary.commonText,
+        secsMsg: summary.secsMsgText,
+        yaml: summary.yamlText,
+      };
+      renderSourceStatus();
+
+      if (results.callMethodText || results.commonText || results.secsMsgText || results.yamlText) {
+        applyProjectSources(results);
+      }
+    }
+
+    async function loadSelectedFiles() {
+      const [callMethodText, commonText, secsMsgText, yamlText] = await Promise.all([
+        fileToText("callMethodFile"),
+        fileToText("commonFile"),
+        fileToText("secsMsgFile"),
+        fileToText("yamlFile"),
+      ]);
+
+      applyProjectSources({
+        callMethodText,
+        commonText,
+        secsMsgText,
+        yamlText,
+      });
+    }
+
+    function yamlScalar(value) {
+      if (value === null || value === undefined || value === "") {
+        return "\"\"";
+      }
+      if (Array.isArray(value)) {
+        return `[${value.map((item) => yamlScalar(item)).join(", ")}]`;
+      }
+      if (typeof value === "boolean") {
+        return value ? "true" : "false";
+      }
+      if (typeof value === "number") {
+        return String(value);
+      }
+
+      const text = String(value);
+      if (/^(true|false)$/i.test(text)) {
+        return text.toLowerCase();
+      }
+      if (/^-?\d+$/.test(text) && !/^0\d+$/.test(text)) {
+        return text;
+      }
+      return JSON.stringify(text);
+    }
+
+    function indentBlock(text, spaces) {
+      const prefix = " ".repeat(spaces);
+      return String(text || "")
+        .split(/\r?\n/)
+        .filter((line) => line.trim() !== "")
+        .map((line) => `${prefix}${line}`)
+        .join("\n");
+    }
+
+    function exportNodeStep(node) {
+      if (node.type === "configure_collection_events") {
+        const lines = [
+          `    - action: "configure_collection_events"`,
+        ];
+        if (node.enableMode) {
+          lines.push(`      enable_mode: ${yamlScalar(node.enableMode)}`);
+        }
+        return lines.join("\n");
+      }
+
+      if (node.type === "wait_reply") {
+        return [
+          `    - action: "wait_reply"`,
+          `      expect_sf: ${yamlScalar(node.expectSf || "")}`,
+          `      timeout: ${yamlScalar(node.timeout || "5")}`,
+        ].join("\n");
+      }
+
+      if (node.type === "if_hcack") {
+        return [
+          `    - action: "if_hcack"`,
+          `      equals: ${yamlScalar(node.equals || "0")}`,
+          `      then: []`,
+          `      else: []`,
+        ].join("\n");
+      }
+
+      if (node.type !== "call_method" && node.type !== "send_secs_msg") {
+        return "";
+      }
+
+      const lines = [
+        `    - action: "${node.type}"`,
+        `      method: ${yamlScalar(node.method || "")}`,
+      ];
+
+      const paramEntries = [];
+      Object.entries(node.params || {}).forEach(([key, value]) => {
+        if (value !== "" && value !== undefined && value !== null) {
+          paramEntries.push([key, value]);
+        }
+      });
+      (node.extraParams || []).forEach((row) => {
+        if (!row || !row.key) return;
+        paramEntries.push([row.key, row.value || ""]);
+      });
+
+      paramEntries.forEach(([key, value]) => {
+        lines.push(`      ${key}: ${yamlScalar(value)}`);
+      });
+
+      if (node.saveAs) {
+        lines.push(`      save_as: ${yamlScalar(node.saveAs)}`);
+      }
+
+      if (node.onErrorRaw && node.onErrorRaw.trim()) {
+        lines.push(`      on_error:`);
+        lines.push(indentBlock(node.onErrorRaw, 8));
+      }
+
+      return lines.join("\n");
     }
 
     function exportYaml() {
-      const nodes = [...canvas.querySelectorAll(".node")];
-      const triggerNode = nodes.find(n => n.dataset.type === "trigger");
-      if (!triggerNode) {
-        output.value = "# Need trigger node";
+      const trigger = getActiveTriggerNode();
+      if (!trigger) {
+        outputYamlEl.value = "# Add a trigger node first.";
         return;
       }
 
-      const triggerSf = triggerNode.querySelector("input[data-key=sf]").value || "S6F11";
-      const steps = [];
-      nodes.forEach((n) => {
-        const t = n.dataset.type;
-        if (t === "trigger") return;
-        if (t === "send_message") {
-          steps.push({
-            action: "send_message",
-            stream: Number(n.querySelector("input[data-key=stream]").value || 2),
-            function: Number(n.querySelector("input[data-key=function]").value || 41),
-            wait_reply: toBool(n.querySelector("input[data-key=wait_reply]").value),
-            retries: Number(n.querySelector("input[data-key=retries]").value || 0),
-            rcmd: n.querySelector("input[data-key=rcmd]").value || "START",
-          });
-          return;
-        }
-        if (t === "wait_reply") {
-          steps.push({
-            action: "wait_reply",
-            expect_sf: n.querySelector("input[data-key=expect_sf]").value || "S2F42",
-            timeout: Number(n.querySelector("input[data-key=timeout]").value || 5),
-          });
-          return;
-        }
-        if (t === "if_hcack") {
-          steps.push({
-            action: "if_hcack",
-            equals: Number(n.querySelector("input[data-key=equals]").value || 0),
-          });
-        }
-      });
+      const lines = [];
+      lines.push(`- name: ${yamlScalar(trigger.workflowName || "visual_flow_1")}`);
+      lines.push(`  trigger:`);
+      lines.push(`    sf: ${yamlScalar(trigger.sf || "S6F11")}`);
+      if (trigger.eventName) {
+        lines.push(`    event_name: [${yamlScalar(trigger.eventName)}]`);
+      }
+      lines.push(`  steps:`);
 
-      if (steps.length === 0) {
-        output.value = "# Need at least one step node";
-        return;
+      const stepNodes = state.nodes.filter((node) => node.type !== "trigger");
+      if (!stepNodes.length) {
+        lines.push(`    []`);
+      } else {
+        stepNodes.forEach((node) => {
+          const snippet = exportNodeStep(node);
+          if (snippet) lines.push(snippet);
+        });
       }
 
-      let yaml = "";
-      yaml += "- name: \"drag_flow_1\"\n";
-      yaml += "  trigger:\n";
-      yaml += `    sf: \"${triggerSf}\"\n`;
-      yaml += "  steps:\n";
+      outputYamlEl.value = lines.join("\n");
+    }
 
-      steps.forEach(s => {
-        if (s.action === "send_message") {
-          yaml += "    - action: \"send_message\"\n";
-          yaml += `      stream: ${s.stream}\n`;
-          yaml += `      function: ${s.function}\n`;
-          yaml += `      wait_reply: ${s.wait_reply ? "true" : "false"}\n`;
-          yaml += `      retries: ${s.retries}\n`;
-          yaml += "      timeout: 5\n";
-          yaml += "      items:\n";
-          yaml += "        - type: \"L\"\n";
-          yaml += "          items:\n";
-          yaml += `            - type: \"A\"\n              value: \"${s.rcmd}\"\n`;
-          yaml += "            - type: \"L\"\n";
-          yaml += "              items:\n";
-          yaml += "                - type: \"L\"\n";
-          yaml += "                  items:\n";
-          yaml += "                    - type: \"A\"\n                      value: \"JOB_ID\"\n";
-          yaml += "                    - type: \"A\"\n                      value: \"${job_id}\"\n";
+    function parseWorkflowSnippet(text) {
+      const lines = String(text || "").split(/\r?\n/);
+      const workflow = {
+        name: "",
+        trigger: {},
+        steps: [],
+      };
+
+      let section = "";
+      let currentStep = null;
+      let stepIndent = -1;
+      let captureOnError = false;
+      let onErrorIndent = -1;
+      let onErrorLines = [];
+
+      function finishOnError() {
+        if (currentStep && onErrorLines.length) {
+          currentStep.onErrorRaw = onErrorLines.join("\n");
+        }
+        captureOnError = false;
+        onErrorIndent = -1;
+        onErrorLines = [];
+      }
+
+      function pushCurrentStep() {
+        finishOnError();
+        if (!currentStep) return;
+        workflow.steps.push(currentStep);
+        currentStep = null;
+      }
+
+      lines.forEach((rawLine) => {
+        const indent = (rawLine.match(/^ */) || [""])[0].length;
+        const trimmed = rawLine.trim();
+        if (!trimmed || trimmed.startsWith("#")) return;
+
+        if (captureOnError) {
+          if (indent <= stepIndent) {
+            finishOnError();
+          } else {
+            const sliced = rawLine.slice(Math.min(rawLine.length, onErrorIndent));
+            onErrorLines.push(sliced);
+            return;
+          }
+        }
+
+        const workflowNameMatch = trimmed.match(/^- name:\s*(.+)$/);
+        if (workflowNameMatch) {
+          workflow.name = stripQuotes(workflowNameMatch[1]);
           return;
         }
-        if (s.action === "wait_reply") {
-          yaml += "    - action: \"wait_reply\"\n";
-          yaml += `      expect_sf: \"${s.expect_sf}\"\n`;
-          yaml += `      timeout: ${s.timeout}\n`;
+
+        if (trimmed === "trigger:") {
+          section = "trigger";
           return;
         }
-        if (s.action === "if_hcack") {
-          yaml += "    - action: \"if_hcack\"\n";
-          yaml += `      equals: ${s.equals}\n`;
-          yaml += "      then: []\n";
-          yaml += "      else: []\n";
+
+        if (trimmed === "steps:") {
+          section = "steps";
+          return;
+        }
+
+        if (section === "trigger" && indent >= 4) {
+          const keyValueMatch = trimmed.match(/^([A-Za-z0-9_]+):\s*(.+)$/);
+          if (!keyValueMatch) return;
+          const key = keyValueMatch[1];
+          const value = parseYamlScalar(keyValueMatch[2]);
+          if (key === "event_name" && Array.isArray(value)) {
+            workflow.trigger.eventName = value[0] || "";
+          } else {
+            workflow.trigger[key] = value;
+          }
+          return;
+        }
+
+        if (section === "steps") {
+          const actionMatch = trimmed.match(/^- action:\s*(.+)$/);
+          if (actionMatch) {
+            pushCurrentStep();
+            currentStep = {
+              action: stripQuotes(actionMatch[1]),
+              params: {},
+              saveAs: "",
+              onErrorRaw: "",
+            };
+            stepIndent = indent;
+            return;
+          }
+
+          if (!currentStep) return;
+
+          if (trimmed === "on_error:") {
+            captureOnError = true;
+            onErrorIndent = indent + 2;
+            return;
+          }
+
+          const keyValueMatch = trimmed.match(/^([A-Za-z0-9_]+):\s*(.+)$/);
+          if (!keyValueMatch) return;
+          const key = keyValueMatch[1];
+          const value = parseYamlScalar(keyValueMatch[2]);
+          if (key === "method") {
+            currentStep.method = String(value || "");
+          } else if (key === "save_as") {
+            currentStep.saveAs = String(value || "");
+          } else if (currentStep.action === "configure_collection_events" && key === "enable_mode") {
+            currentStep.enableMode = String(value || "");
+          } else if (currentStep.action === "wait_reply" && key === "expect_sf") {
+            currentStep.expectSf = String(value || "");
+          } else if (currentStep.action === "wait_reply" && key === "timeout") {
+            currentStep.timeout = String(value || "");
+          } else if (currentStep.action === "if_hcack" && key === "equals") {
+            currentStep.equals = String(value || "");
+          } else if (key !== "action") {
+            currentStep.params[key] = value;
+          }
         }
       });
 
-      output.value = yaml;
+      pushCurrentStep();
+      return workflow;
+    }
+
+    function loadWorkflowSnippet(text, syncInput = false) {
+      const parsed = parseWorkflowSnippet(text);
+      const nodes = [];
+      nodes.push(createNodeState("trigger", {
+        workflowName: parsed.name || "visual_flow_1",
+        sf: parsed.trigger.sf || "S6F11",
+        eventName: parsed.trigger.eventName || parsed.trigger.event_name || "",
+      }));
+
+      (parsed.steps || []).forEach((step) => {
+        if (step.action === "call_method") {
+          nodes.push(classifyImportedParams(createNodeState("call_method", {
+            method: step.method || "",
+            params: step.params || {},
+            saveAs: step.saveAs || "",
+            onErrorRaw: step.onErrorRaw || "",
+          })));
+        } else if (step.action === "send_secs_msg") {
+          nodes.push(classifyImportedParams(createNodeState("send_secs_msg", {
+            method: step.method || "",
+            params: step.params || {},
+            saveAs: step.saveAs || "",
+            onErrorRaw: step.onErrorRaw || "",
+          })));
+        } else if (step.action === "configure_collection_events") {
+          nodes.push(createNodeState("configure_collection_events", {
+            enableMode: step.enableMode || "selected",
+          }));
+        } else if (step.action === "wait_reply") {
+          nodes.push(createNodeState("wait_reply", {
+            expectSf: step.expectSf || "S2F42",
+            timeout: step.timeout || "5",
+          }));
+        } else if (step.action === "if_hcack") {
+          nodes.push(createNodeState("if_hcack", {
+            equals: step.equals || "0",
+          }));
+        }
+      });
+
+      state.nodes = nodes;
+      if (syncInput) {
+        inputYamlEl.value = text || "";
+      }
+      renderCanvas();
+      renderWorkflowLibrary();
+      exportYaml();
     }
 
     function importYaml() {
-      const text = input.value || "";
-      canvas.innerHTML = "";
-
-      const sfMatch = text.match(/sf:\s*["']?(S\d+F\d+)["']?/i);
-      const trigger = createNode("trigger");
-      if (sfMatch) trigger.querySelector("input[data-key=sf]").value = sfMatch[1];
-      canvas.appendChild(trigger);
-
-      const sendRegex = /-\s*action:\s*["']send_message["'][\s\S]*?stream:\s*(\d+)[\s\S]*?function:\s*(\d+)[\s\S]*?wait_reply:\s*(true|false)[\s\S]*?(?:retries:\s*(\d+))?[\s\S]*?value:\s*["']([^"']+)["']/gi;
-      let m;
-      while ((m = sendRegex.exec(text)) !== null) {
-        const n = createNode("send_message");
-        n.querySelector("input[data-key=stream]").value = m[1];
-        n.querySelector("input[data-key=function]").value = m[2];
-        n.querySelector("input[data-key=wait_reply]").value = m[3];
-        n.querySelector("input[data-key=retries]").value = m[4] || "0";
-        n.querySelector("input[data-key=rcmd]").value = m[5];
-        canvas.appendChild(n);
-      }
-
-      const waitRegex = /-\s*action:\s*["']wait_reply["'][\s\S]*?expect_sf:\s*["']([^"']+)["'][\s\S]*?timeout:\s*(\d+)/gi;
-      while ((m = waitRegex.exec(text)) !== null) {
-        const n = createNode("wait_reply");
-        n.querySelector("input[data-key=expect_sf]").value = m[1];
-        n.querySelector("input[data-key=timeout]").value = m[2];
-        canvas.appendChild(n);
-      }
-
-      const ifRegex = /-\s*action:\s*["']if_hcack["'][\s\S]*?equals:\s*(\d+)/gi;
-      while ((m = ifRegex.exec(text)) !== null) {
-        const n = createNode("if_hcack");
-        n.querySelector("input[data-key=equals]").value = m[1];
-        canvas.appendChild(n);
-      }
+      loadWorkflowSnippet(inputYamlEl.value, false);
     }
 
-    document.getElementById("btnExport").onclick = exportYaml;
-    document.getElementById("btnImport").onclick = importYaml;
-    document.getElementById("btnClear").onclick = () => { canvas.innerHTML = ""; output.value = ""; input.value = ""; };
+    function clearDesigner() {
+      state.nodes = [];
+      outputYamlEl.value = "";
+      inputYamlEl.value = "";
+      renderCanvas();
+      renderWorkflowLibrary();
+    }
+
+    function ensureTriggerExists() {
+      if (getActiveTriggerNode()) return;
+      state.nodes.unshift(createNodeState("trigger"));
+      renderCanvas();
+    }
+
+    function attachCanvasDropSupport() {
+      canvasEl.addEventListener("dragover", (event) => {
+        event.preventDefault();
+      });
+      canvasEl.addEventListener("drop", (event) => {
+        event.preventDefault();
+        const nodeType = event.dataTransfer.getData("application/node-type");
+        if (!nodeType) return;
+        addNode(nodeType);
+      });
+    }
+
+    document.getElementById("btnAutoLoad").addEventListener("click", autoLoadProjectSources);
+    document.getElementById("btnLoadSelected").addEventListener("click", loadSelectedFiles);
+    document.getElementById("btnAddTrigger").addEventListener("click", ensureTriggerExists);
+    document.getElementById("btnExport").addEventListener("click", exportYaml);
+    document.getElementById("btnImport").addEventListener("click", importYaml);
+    document.getElementById("btnClear").addEventListener("click", clearDesigner);
+
+    renderPalette();
+    renderAllMetadata();
+    attachCanvasDropSupport();
+    autoLoadProjectSources();
   </script>
 </body>
 </html>
